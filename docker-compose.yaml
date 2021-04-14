@@ -1,0 +1,32 @@
+version: '3.7'
+
+services:
+  enclave:
+    image: pktransfer-enclave
+    build:
+      context: pktransfer
+      dockerfile: Dockerfile
+    devices:
+      - /dev/isgx
+    volumes:
+      - ./pktransfer:/root/sgx/samplecode/pktransfer
+      - ./incubator-teaclave-sgx-sdk-master:/root/sgx/incubator-teaclave-sgx-sdk-master
+      - type: bind
+        source: /var/run/aesmd/aesm.socket
+        target: /var/run/aesmd/aesm.socket
+    working_dir: /root/sgx/samplecode/pktransfer
+    environment:
+      - IAS_SGX_SPID
+      - IAS_SGX_PRIMARY_KEY
+    ports:
+      - 8000:8000
+    command: ./build_run.sh
+  client:
+    image: pktransfer-client
+    build:
+      context: client
+      dockerfile: Dockerfile
+    volumes:
+      - ./client:/root/client
+    working_dir: /root/client
+    command: python3 test.py
