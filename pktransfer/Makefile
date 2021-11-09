@@ -18,10 +18,11 @@
 ######## SGX SDK Settings ########
 
 SGX_SDK ?= /opt/sgxsdk
-SGX_MODE ?= HW
+SGX_MODE ?= SW
 SGX_ARCH ?= x64
+SGX_SDK_RUST ?= /root/sgx/incubator-teaclave-sgx-sdk-master/
 
-TOP_DIR := ../../incubator-teaclave-sgx-sdk-master
+TOP_DIR :=/root/sgx/incubator-teaclave-sgx-sdk-master
 include $(TOP_DIR)/buildenv.mk
 
 ifeq ($(shell getconf LONG_BIT), 32)

@@ -18,7 +18,6 @@ http_req = { git = "https://github.com/mesalock-linux/http_req-sgx" }
 serde_json = { git = "https://github.com/mesalock-linux/serde-json-sgx" }
 ring = { git = "https://github.com/mesalock-linux/ring-sgx", tag = "v0.16.5"  }
 base64 = { git = "https://github.com/mesalock-linux/rust-base64-sgx" }
-# chrono = { git = "https://github.com/mesalock-linux/chrono-sgx" }
 
 [target.'cfg(not(target_env = "sgx"))'.dependencies]
 sgx_types = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }

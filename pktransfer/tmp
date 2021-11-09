@@ -1,0 +1,6 @@
+- create merkle tree in rust w/ SHA256
+- decode merkle tree in python
+- get/check merkle tree path in python
+- add countdown after 1st retrieve stage
+- ability to update max retrieve, reset time for max retrieve, wait time between stages,
+  - updatable values added to audit db

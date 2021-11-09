@@ -26,8 +26,6 @@ enclave {
     trusted {
         /* define ECALLs here. */
 
-        public sgx_status_t say_something([in, size=len] const uint8_t* some_string, size_t len);
-
         public sgx_status_t init_db([out, size=256] uint8_t* n,[out, size=4] uint8_t* e);
 
         public sgx_status_t signup([in, size=len] const uint8_t* some_string, size_t len);
@@ -39,6 +37,12 @@ enclave {
         public sgx_status_t audit([out, size=max_len] uint8_t* db, size_t max_len, [out, size=8] size_t* out_len);
 
         public sgx_status_t public_key([out, size=256] uint8_t* n,[out, size=4] uint8_t* e);
+
+        public sgx_status_t update_reset_time(uint64_t value);
+
+        public sgx_status_t update_retrieve_wait_time(uint64_t value);
+
+        public sgx_status_t update_max_retrieve(uint64_t value);
 
     };
 };

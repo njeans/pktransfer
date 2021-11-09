@@ -1,5 +1,5 @@
+
 use std::vec::Vec;
-use std::string::String;
 
 use sgx_types::*;
 use sgx_tcrypto::*;
@@ -156,6 +156,7 @@ impl RSAPublicKey {
 }
 
 pub fn build_rsa_key(rsa_key: &mut RSAKeyPair, public_key: &mut RSAPublicKey) -> sgx_status_t {
+    println!("build_rsa_key");
     let mod_size: i32 = 256;
     let exp_size: i32 = 4;
     let mut n: Vec<u8> = vec![0_u8; mod_size as usize];
@@ -198,6 +199,9 @@ pub fn build_rsa_key(rsa_key: &mut RSAKeyPair, public_key: &mut RSAPublicKey) ->
     rsa_key.iqmp = iqmp;
     public_key.mod_size = mod_size;
     public_key.exp_size = exp_size;
+    println!("n {:?}", n);
+    println!("e {:?}", e);
+
     let mut n_slice = [0; 256];
     n_slice.copy_from_slice(&n[0..256]);
     public_key.n = SecretData::new_data(&n_slice, 256 as usize);

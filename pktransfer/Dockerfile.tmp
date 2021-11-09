@@ -1,0 +1,45 @@
+FROM initc3/linux-sgx:2.6
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ENV rust_toolchain nightly-2019-08-01
+
+RUN apt-get update && apt-get install -y \
+  autoconf \
+  clang \
+  cmake \
+  curl \
+  git-core \
+  libtool \
+  libzmq3-dev \
+  llvm \
+  vim \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV RUSTUP_HOME=/usr/local/rustup \
+  CARGO_HOME=/usr/local/cargo \
+  PATH=/usr/local/cargo/bin:$PATH
+
+RUN set -eux; \
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y; \
+  chmod -R a+w $RUSTUP_HOME $CARGO_HOME; \
+  rustup --version; \
+  cargo --version; \
+  rustc --version;
+
+RUN rustup toolchain install nightly
+RUN rustup default ${rust_toolchain}
+RUN cargo +nightly install bindgen fortanix-sgx-tools sgxs-tools
+
+RUN rustup component add rust-src rls rust-analysis clippy rustfmt
+
+#RUN git clone --single-branch --branch v1.0.9 https://github.com/apache/incubator-teaclave-sgx-sdk.git /root/sgx
+RUN git clone --depth 1 -b v1.0.9 https://github.com/apache/incubator-teaclave-sgx-sdk /root/sgx
+
+COPY . /usr/src/enclave
+WORKDIR /usr/src/enclave/pktransfer
+COPY remove_dir_all-patched-lib.rs /usr/local/cargo/registry/src/github.com-1ecc6299db9ec823/remove_dir_all-0.5.3/src/lib.rs
+
+RUN . /usr/local/cargo/env && . /opt/sgxsdk/environment
+ENV SGX_SDK /opt/sgxsdk
+RUN make clean && make

@@ -25,6 +25,7 @@ extern crate sgx_urts;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate serde_cbor;
+extern crate base64;
 
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
@@ -45,6 +46,9 @@ extern {
                         some_string: *const u8, len: usize, encrypted_secret: &mut [u8;RETREIVE_SECRET_LEN]) -> sgx_status_t;
     fn audit(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, db: * mut u8, max_len: usize, out_len: *mut usize) -> sgx_status_t;
     fn public_key(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, n: * mut u8, e: * mut u8) -> sgx_status_t;
+    fn update_reset_time(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, value: u64) -> sgx_status_t;
+    fn update_max_retrieve(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, value: u64) -> sgx_status_t;
+    fn update_retrieve_wait_time(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, value: u64) -> sgx_status_t;
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -52,12 +56,24 @@ pub struct AuditDatabase {
     timestamp: u64,
     retrieve_count: u64,
     users: Vec<Vec<u8>>,
-    retrieve: Vec<Vec<u8>>
+    retrieve: Vec<Vec<u8>>,
+    tree: MerkleTree,
 }
+
+type Hash = Vec<u8>;
+
+
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+pub struct MerkleTree {
+    nodes: Vec<Hash>,
+    count_internal_nodes: usize,
+    count_leaves: usize,
+}
+
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SignupReq {
-   secret: Vec<u8>,
+   secret: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -68,7 +84,12 @@ pub struct HostReq {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserReq {
    uid: u32,
-   secret: Vec<u8>,
+   secret: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct UpdateReq {
+   value: u64,
 }
 
 fn init_enclave() -> SgxResult<SgxEnclave> {
@@ -143,9 +164,16 @@ fn main() {
                         return rouille::Response::text(format!("Error parsing body json err {} request {:#?}", e, request)).with_status_code(400);
                     }
                 };
+                let secret = match base64::decode(signup_req.secret) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("decoding base64 {} request {:#?}", e, request);
+                        return rouille::Response::text(format!("Error decoding base64 {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
 
-                if signup_req.secret.len() != SECRET_LEN {
-                    return rouille::Response::text(format!("Error parsing body secret len is {} not {}", signup_req.secret.len(), SECRET_LEN)).with_status_code(400);
+                if secret.len() != SECRET_LEN {
+                    return rouille::Response::text(format!("Error parsing body secret len is {} not {}", secret.len(), SECRET_LEN)).with_status_code(400);
                 }
 
                 let mut retval = sgx_status_t::SGX_SUCCESS;
@@ -153,8 +181,8 @@ fn main() {
                 let result = unsafe {
                     signup(eid,
                           &mut retval,
-                          signup_req.secret.as_ptr() as * const u8,
-                          signup_req.secret.len())
+                          secret.as_ptr() as * const u8,
+                          secret.len())
                 };
 
                 match result {
@@ -210,17 +238,24 @@ fn main() {
             },
             (POST) (/user) => {
                 println!("user request");
-                let user_req: UserReq = try_or_400!(rouille::input::json_input(&request));
-                // let user_req: UserReq = match rouille::input::json_input(&request) {
-                //     Ok(x) => x,
-                //     Err(e) => {
-                //         println!("json_input err {} request {:#?}",e, request);
-                //         return rouille::Response::text(format!("Error parsing body json err {} request {:#?}", e, request)).with_status_code(400);
-                //     }
-                // };
+                // let user_req: UserReq = try_or_400!(rouille::input::json_input(&request));
+                let user_req: UserReq = match rouille::input::json_input(&request) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("json_input err {} request {:#?}",e, request);
+                        return rouille::Response::text(format!("Error parsing body json err {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
+                let secret = match base64::decode(user_req.secret) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("decoding base64 {} request {:#?}", e, request);
+                        return rouille::Response::text(format!("Error decoding base64 {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
 
-                if user_req.secret.len() != SECRET_LEN {
-                    return rouille::Response::text(format!("Error parsing body secret len is {} not {}", user_req.secret.len(), SECRET_LEN)).with_status_code(400);
+                if secret.len() != SECRET_LEN {
+                    return rouille::Response::text(format!("Error parsing body secret len is {} not {}", secret.len(), SECRET_LEN)).with_status_code(400);
                 }
 
                 let mut retval = sgx_status_t::SGX_SUCCESS;
@@ -230,8 +265,8 @@ fn main() {
                     user_retrieve(eid,
                                   &mut retval,
                                   user_req.uid,
-                                  user_req.secret.as_ptr() as * const u8,
-                                  user_req.secret.len(),
+                                  secret.as_ptr() as * const u8,
+                                  secret.len(),
                                   encrypted_secret)
                 };
 
@@ -258,20 +293,10 @@ fn main() {
             (GET)  (/public_key) => {
                 #[derive(Serialize)]
                 struct PK {
-                    n: [[u8; 32]; 8],
-                    e: [u8; 4],
+                    n: String,
+                    e: String,
                 };
-                let mut n_arr: [[u8; 32]; 8] = Default::default();
-                n_arr[0].copy_from_slice(&public_key_n[0 .. 32]);
-                n_arr[1].copy_from_slice(&public_key_n[32 .. 64]);
-                n_arr[2].copy_from_slice(&public_key_n[64 .. 96]);
-                n_arr[3].copy_from_slice(&public_key_n[96 .. 128]);
-                n_arr[4].copy_from_slice(&public_key_n[128 .. 160]);
-                n_arr[5].copy_from_slice(&public_key_n[160 .. 192]);
-                n_arr[6].copy_from_slice(&public_key_n[192 .. 224]);
-                n_arr[7].copy_from_slice(&public_key_n[224 .. 256]);
-                println!("[+] public_key_n {:?}!", public_key_n);
-                rouille::Response::json(&PK{n: n_arr, e: def_public_key_e})
+                rouille::Response::json(&PK{n: base64::encode(public_key_n), e: base64::encode(def_public_key_e)})
             },
             (GET)  (/audit) => {
                 println!("audit");
@@ -323,6 +348,96 @@ fn main() {
                     }
                 };
                 rouille::Response::text(ret)
+            },
+            (POST) (/wait_time) => {
+                println!("wait_time request");
+                let update_req: UpdateReq = try_or_400!(rouille::input::json_input(&request));
+
+                let mut retval = sgx_status_t::SGX_SUCCESS;
+                let result = unsafe {
+                    update_retrieve_wait_time(eid,
+                                  &mut retval,
+                                  update_req.value)
+                };
+                match result {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave result Failed {}!", result.as_str())).with_status_code(400);
+                    }
+                }
+
+                match retval {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave function Failed {}!", retval.as_str())).with_status_code(400);
+
+                    }
+                }
+                println!("[+] wait_time success...");
+
+                rouille::Response::text("success")
+            },
+            (POST) (/reset_time) => {
+                println!("reset_time request");
+                let update_req: UpdateReq = try_or_400!(rouille::input::json_input(&request));
+
+                let mut retval = sgx_status_t::SGX_SUCCESS;
+                let result = unsafe {
+                    update_reset_time(eid,
+                                  &mut retval,
+                                  update_req.value)
+                };
+                match result {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave result Failed {}!", result.as_str())).with_status_code(400);
+                    }
+                }
+
+                match retval {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave function Failed {}!", retval.as_str())).with_status_code(400);
+
+                    }
+                }
+                println!("[+] reset_time success...");
+
+                rouille::Response::text("success")
+            },
+            (POST) (/max_retrieve) => {
+                println!("max_retrieve request");
+                let update_req: UpdateReq = try_or_400!(rouille::input::json_input(&request));
+
+                let mut retval = sgx_status_t::SGX_SUCCESS;
+                let result = unsafe {
+                    update_max_retrieve(eid,
+                                  &mut retval,
+                                  update_req.value)
+                };
+                match result {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave result Failed {}!", result.as_str())).with_status_code(400);
+                    }
+                }
+
+                match retval {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave function Failed {}!", retval.as_str())).with_status_code(400);
+
+                    }
+                }
+                println!("[+] max_retrieve success...");
+
+                rouille::Response::text("success")
             },
             // The code block is called if none of the other blocks matches the request.
             // We return an empty response with a 404 status code.

@@ -1,14 +1,18 @@
-
 use std::net::TcpStream;
 use std::string::String;
 use std::vec::Vec;
 
 use http_req::{request::RequestBuilder, tls, uri::Uri};
-// use std::ffi::CString;
 use serde_json;
-// use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 
 pub fn get_timestamp() -> u64 {
+    match timezonedb() {
+        Some(x) => {
+            println!("timezonedb {}",x);
+            return x;
+        },
+        None => {}
+    };
     match ipgeolocation() {
         Some(x) => {
             println!("ipgeolocation {}",x);
@@ -65,4 +69,46 @@ fn ipgeolocation() -> Option<u64> {
         }
     };
     return Some(unix)
+}
+
+fn timezonedb() -> Option<u64> {
+    let hostname = "http://api.timezonedb.com/v2.1/get-time-zone?key=G6905DVGFEKH&format=json&by=zone&zone=America/Chicago";
+    let addr: Uri = hostname.parse().unwrap();
+    let host = match addr.host() {
+        Some(x) => x,
+        None => {
+            println!("Err host");
+            return None;
+        }
+    };
+    let port = 443;
+
+    let conn_addr = format!("{}:{}", host, port);
+
+    let stream = TcpStream::connect(conn_addr).unwrap();
+
+    let mut stream = tls::Config::default()
+        .connect(addr.host().unwrap_or(""), stream)
+        .unwrap();
+
+    let mut writer = Vec::new();
+
+    let response = RequestBuilder::new(&addr)
+        .header("Connection", "Close")
+        .send(&mut stream, &mut writer)
+        .unwrap();
+    let res = String::from_utf8_lossy(&writer);
+
+    let json_res: serde_json::Value = match serde_json::from_str(&res) {
+        Ok(x) => x,
+        Err(e) => {
+           println!("Err json {:?}",e);
+           return None;
+       }
+    };
+    if json_res["status"] == "OK" {
+        println!("{:?}",json_res);
+        return json_res["timestamp"].as_u64();
+    }
+    return None;
 }
