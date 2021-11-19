@@ -34,3 +34,5 @@ log*
 *.pem
 data.sealed
 lib/*
+pktransfer/server.log
+

@@ -40,21 +40,22 @@ RUN apt-get update
 
 FROM sgxbase as sgx_sample_builder
 # App build time dependencies
-RUN apt-get install -y build-essential
+RUN apt-get update
+RUN apt-get install -y build-essential git libclang-dev
 
+#sgx sdk
 WORKDIR /opt/intel
 RUN wget https://download.01.org/intel-sgx/sgx-linux/2.8/distro/ubuntu18.04-server/sgx_linux_x64_sdk_2.8.100.3.bin
 RUN chmod +x sgx_linux_x64_sdk_2.8.100.3.bin
-
 RUN echo 'yes' | ./sgx_linux_x64_sdk_2.8.100.3.bin
+
 WORKDIR /opt/intel/sgxsdk/SampleCode/SampleEnclave
-COPY . /opt/intel/sgxsdk/SampleCode/SampleEnclave/
 
-RUN apt-get install -y libclang-dev
-# WORKDIR /opt/intel/sgxsdk/SampleCode/SampleEnclave/Enclave
-# RUN cmake .
-# WORKDIR /opt/intel/sgxsdk/SampleCode/SampleEnclave
+#libclang
+RUN git clone https://github.com/llvm/llvm-project.git
 
+COPY sidechannel/.  .
+RUN cat Makefile
 RUN SGX_DEBUG=0 SGX_MODE=HW SGX_PRERELEASE=1 make
 
 FROM sgxbase as sample

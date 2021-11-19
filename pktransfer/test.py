@@ -13,6 +13,17 @@ pk_file = "enclave_public_key.pem"
 uid_size = 4
 max_count = 2
 
+class bcolors:
+    USER1 = '\033[95m'
+    USER2 = '\033[94m'
+    USER3 = '\033[96m'
+    USER4 = '\033[92m'
+    USER5 = '\033[93m'
+    AUDIT = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 def encrypt_rsa(msg_plaintext, pem_filename):
     key = RSA.importKey(open(pem_filename).read())
     cipher = PKCS1_OAEP.new(key, hashAlgo=Crypto.Hash.SHA256)
@@ -30,20 +41,23 @@ def decrypt_rsa(msg_plaintext, pem_filename):
 def int_to_bytes(val, num_bytes):
     return [(val & (0xff << pos*8)) >> pos*8 for pos in reversed(range(num_bytes))]
 
-def get_number_hex(values):
+def get_number_hex(values,reverse_values=True):
     total = 0
-    for val in reversed(values):
+    final_values = values
+    if reverse_values:
+        final_values = reversed(values)
+    for val in final_values:
         total = (total << 8) + val
     return hex(total)
 
 def get_number(values):
     total = 0
-    for val in values:#reversed(values):
+    for val in values:
         total = (total << 8) + val
     return total
 
-def get_number_trunc(values):
-    h=get_number_hex(values)
+def get_number_trunc(values,reverse_values=True):
+    h=get_number_hex(values,reverse_values=reverse_values)
     return str(h[:10])+"..."
 
 
@@ -52,74 +66,91 @@ class Tree(object):
         self.left = None
         self.right = None
         self.data = None
+        self.leaf = None
 
     def __str__(self):
         return str(self.data)
 
-def helper(nodes,pos,curr):
+def helper(nodes,pos,curr,leaves):
     level = math.floor(math.log(pos,2))
     left_pos = 2**(level+1) + (pos-2**level) * 2
     right_pos = 2**(level+1) + (pos-2**level) * 2 + 1
-    # print("pod",left_pos,right_pos,len(nodes))
+    if pos > len(nodes) - len(leaves):
+        curr.leaf = leaves[pos-(len(nodes)-len(leaves))-1]
+
     if left_pos <= len(nodes):
         curr.left = Tree()
         curr.left.data = nodes[left_pos-1]
-        # print("left of ",curr.data,": ",curr.left)
-        helper(nodes,left_pos,curr.left)
+        helper(nodes,left_pos,curr.left,leaves)
     if right_pos <= len(nodes):
         curr.right =  Tree()
         curr.right.data = nodes[right_pos-1]
-        # print("right of ",curr.data,": ",curr.right)
-        helper(nodes,right_pos,curr.right)
+        helper(nodes,right_pos,curr.right,leaves)
 
 
-def make_tree(nodes):
+def make_tree(nodes,leaves):
     root = Tree()
     pos = 1
     root.data = nodes[0]
-    # print("root",roxsot)
-    helper(nodes,pos,root)
-    # print(str(root))
+    helper(nodes,pos,root,leaves)
     return root
 
-def print_tree(node, level=0, right=False):
+def print_tree(node, level=0, right=False, p=lambda x: get_number_trunc(x)):
     if node != None:
-        print_tree(node.left, level + 1)
+        print_tree(node.left, level + 1,p=p)
+        leaf=""
+        if node.leaf is not None:
+            leaf = " leaf: [" + str(node.leaf) + "]"
         if right:
-            print("\t" * level + '->', node.data)
+            print(bcolors.AUDIT+"\t\t\t" * level + '-> (' + p(node.data)+")"+leaf,bcolors.ENDC)
             # print("\t" * level + '\\', node.data)
         else:
             # print("\t" * level + '/', node.data)
-            print("\t" * level + '->', node.data)
-        print_tree(node.right, level + 1, True)
+            print(bcolors.AUDIT+"\t\t\t" * level + '-> (' + p(node.data)+")"+leaf,bcolors.ENDC)
+        print_tree(node.right, level + 1, True,p=p)
+
 
 def helper_index(curr_path,leaf_index):
-    if leaf_index == 0:
+    if leaf_index <= 0:
         return curr_path
-    if leaf_index % 2 == 0:
+    if leaf_index % 2 == 1:
         leaf_level =  math.floor(math.log(leaf_index+1,2))
-        parent_level = leaf_level - 1
-        parent_index = (leaf_index - (2**leaf_level))/2 - (2**parent_level)
+        parent_index = (leaf_index + 1 - 2**(leaf_level+1))/2 -1 + 2**leaf_level
         curr_path.append(leaf_index+1)
-        curr_path.append(parent_index)
-        helper_index(curr_path,parent_index)
+        curr_path.append(int(parent_index))
+        helper_index(curr_path,int(parent_index))
     else:
-        print(leaf_index+1)
-        print(math.log(leaf_index+1,2))
-        print(math.floor(math.log(leaf_index+1,2)))
-
         leaf_level =  math.floor(math.log(leaf_index+1,2))
-        parent_level = leaf_level - 1
-        parent_index = (leaf_index - (2**leaf_level)-1)/2 - (2**parent_level)
+        parent_index = (leaf_index + 1 - 2**(leaf_level+1) - 1)/2 - 1 + 2**leaf_level
         curr_path.append(leaf_index-1)
-        curr_path.append(parent_index)
-        helper_index(curr_path,parent_index)
+        curr_path.append(int(parent_index))
+        helper_index(curr_path,int(parent_index))
 
-def get_path(root,leaf_index):
-    path= [leaf_index]
+def get_path(nodes,leaf_index):
+    path=[leaf_index]
     helper_index(path,leaf_index)
-    print(path)
+    node_path_pairs = []
+    for i in range(0,len(path)-2,2):
+        n1 = path[i]
+        n2 = path[i+1]
+        if n1 > n2:
+            node_path_pairs.append((nodes[n2],nodes[n1],nodes[path[i+2]]))
+        else:
+            node_path_pairs.append((nodes[n1],nodes[n2],nodes[path[i+2]]))
+    return node_path_pairs
 
+def check_path(path,leaf,color,entry):
+    entry_data = int_to_bytes(entry["uid"],4)+int_to_bytes(entry["countdown"],8)+int_to_bytes(entry["retrieve_count"],8)
+    h_entry = Crypto.Hash.SHA256.new(bytearray(entry_data))
+    print(color+"hash of entry",str(entry),"->",get_number_trunc(leaf),bcolors.ENDC)
+    # print(get_number_hex(leaf,reverse_values=False)==("0x"+h_entry.hexdigest().lstrip("0")),("0x"+h_entry.hexdigest().lstrip("0"))[:10],get_number_trunc(leaf,reverse_values=False))
+    assert(get_number_hex(leaf,reverse_values=False)==("0x"+h_entry.hexdigest().lstrip("0")))
+    for node_path_pairs in path:
+        left,right,res=node_path_pairs
+        h = Crypto.Hash.SHA256.new(bytearray(left+right))
+        print(color+"combine",get_number_trunc(left),"+",get_number_trunc(right),"->",get_number_trunc(res),bcolors.ENDC)
+        # print("0x"+h.hexdigest().lstrip("0")==get_number_hex(res,reverse_values=False),("0x"+h.hexdigest().lstrip("0"))[:10],get_number_trunc(res,reverse_values=False))
+        assert("0x"+h.hexdigest().lstrip("0")==get_number_hex(res,reverse_values=False))
 
 def get_pk():
     get_pub_key_req = requests.get(url + '/public_key')
@@ -145,7 +176,6 @@ def signup(uid, secret_data):
         print("fail signup_req status_code != 200:", signup_req.status_code, signup_req.content)
         return
     ret = int_to_bytes(int.from_bytes(data, 'big', signed=False), 256)
-    print("success signup user with uid",uid, "secret_data", secret_data, "encrypted_secret_data", get_number_trunc(data))
     return ret
 
 def host_ret(uid):
@@ -154,7 +184,6 @@ def host_ret(uid):
     if host_ret_req.status_code != 200:
         print("fail host_ret_req status_code != 200:", host_ret_req.status_code, host_ret_req.content)
         return False
-    print("success started retrieve with host_retrieve api for uid:",uid)
     return True
 
 def user_ret(uid):
@@ -172,87 +201,87 @@ def user_ret(uid):
     ciphertext = bytes(return_data[:-16])
     tag = bytes(return_data[-16:])
     plaintext = cipher.decrypt_and_verify(ciphertext, tag).decode('utf-8').rstrip(chr(0))
-    print("success completed retrieve with user_retrieve api for uid:",uid)
+
     return plaintext
 
-def check_retrieval(uid, expected, plaintext):
+def check_retrieval(uid, expected, plaintext,color):
     uid_chr="".join([chr(x) for x in int_to_bytes(uid,4)])
-    # print([ord(x) for x in plaintext[:4]])
     assert(str(plaintext) == str(uid_chr+expected))
-    print("check_retrieval returned:", str(get_number_hex([ord(x) for x in plaintext])), str(get_number([ord(x) for x in plaintext[:4]]))+","+"".join(plaintext[4:]),"expected:",str(uid)+","+expected,str(get_number_hex([ord(x) for x in uid_chr+expected])))
+    print(color+"check_retrieval returned:", str(get_number_hex([ord(x) for x in plaintext])), str(get_number([ord(x) for x in plaintext[:4]]))+","+"".join(plaintext[4:]),"expected:",str(uid)+","+expected,str(get_number_hex([ord(x) for x in uid_chr+expected])),bcolors.ENDC)
 
 
-def audit(users=None, retrievals=None):
+def audit_tree():
     get_audit_req = requests.get(url + '/audit')
     if get_audit_req.status_code != 200:
         print("get_audit_req status_code != 200:", get_audit_req.status_code, get_audit_req.content)
         return
     audit_data = json.loads(get_audit_req.content)
-    audit_tree = make_tree(audit_data["tree"]["nodes"])
-    print("audit_data[tree]",print_tree(audit_tree))
+    # print(json.dumps(audit_data["tree"],indent=2))
+
+    leaves = audit_data["tree"]["leaves"]
+    nodes = audit_data["tree"]["nodes"]
+    audit_tree = make_tree(nodes,leaves)
+    print(bcolors.AUDIT+"audit_data[tree]",bcolors.ENDC)
+    print_tree(audit_tree)
     assert(audit_data["retrieve_count"] <= max_count)
-    print("audit_data retrieve_count",audit_data["retrieve_count"], "MAX_retrieve", max_count)
+    print(bcolors.AUDIT+"audit_data retrieve_count",audit_data["retrieve_count"], "MAX_retrieve", max_count,bcolors.ENDC)
     print()
-    if users is not None:
-        print("audit_data users_list", list(map(get_number_trunc,audit_data["users"])))
-        for (uid,secret) in users:
-            print("audit_data user uid:",uid,"encrypted secret data",get_number_trunc(secret))
-            assert(secret in audit_data["users"])
-    print()
-    if retrievals is not None:
-        print("audit_data retrievals", list(map(get_number_trunc,audit_data["retrieve"])))
-        for (uid,secret) in retrievals:
-            print("audit_data retrieved uid:",uid,"encrypted secret data", get_number_trunc(secret))
-            assert(secret in audit_data["retrieve"])
+    return nodes,leaves
+
+def audit_user(uid,secret,tree_nodes,leaves,color):
+    print
+    leaf_index = 0
+    for i in range(len(leaves)):
+        if leaves[i]["uid"] == uid:
+            leaf_index=len(tree_nodes)-len(leaves)+i
+            path = get_path(tree_nodes,leaf_index)
+            check_path(path,tree_nodes[leaf_index],color,leaves[i])
+            print()
 
 get_pk()
-uid_1 = 1
-test_data_1 = "hello1"
-uid_2 = 2
-test_data_2 = "hello2"
-uid_3 = 3
-test_data_3 = "hello3"
-secret_1 = signup(uid_1, test_data_1)
-if secret_1 is None:
-    exit(1)
-secret_2 = signup(uid_2, test_data_2)
-if secret_2 is None:
-    exit(1)
-secret_3 = signup(uid_3, test_data_3)
-if secret_3 is None:
-    exit(1)
-print()
 
-resp = host_ret(uid_1)
-if not resp:
-    exit(1)
-time.sleep(5)
-response_1 = user_ret(uid_1)
-if response_1 is None:
-    exit(1)
-check_retrieval(uid_1, test_data_1, response_1)
-print()
+users_list = [[1,"hello1",bcolors.USER1],[2,"hello2",bcolors.USER5],[3,"hello3",bcolors.USER3],[4,"hello4",bcolors.USER4]]
+user_secret = [0,0,0,0]
+only_audit = False #only run the auditing scheme
+if not only_audit:
+    for i in range(len(users_list)):
+        uid,test_data,color = users_list[i]
+        secret = signup(uid, test_data)
+        if secret is None:
+            exit(1)
+        print(color+"success signup user with uid",uid, "secret_data", test_data, "encrypted_secret_data", get_number_trunc(secret),bcolors.ENDC)
+        user_secret[i]=secret
+    print()
+
+    for i in [0,2]:
+        uid,test_data,color = users_list[i]
+        secret = user_secret[i]
+        resp = host_ret(uid)
+        if not resp:
+            exit(1)
+        print(color+"success started retrieve with host_retrieve api for uid:",uid,bcolors.ENDC)
+        print("wait 5 sec..")
+        time.sleep(5)
+        response = user_ret(uid)
+        if response is None:
+            exit(1)
+        print(color+"success completed retrieve with user_retrieve api for uid:",uid,bcolors.ENDC)
+        check_retrieval(uid, test_data, response, color)
+        print()
+
+    for i in [3]:
+        uid,test_data,color = users_list[i]
+        resp = host_ret(uid)
+        if not resp:
+            exit(1)
+        print(color+"success started retrieve with host_retrieve api for uid:",uid,bcolors.ENDC)
+
+print("\n"+bcolors.AUDIT+"Public Audit Website------------------------------------------------------------------------------------------------------",bcolors.ENDC)
 
 
-resp = host_ret(uid_3)
-if not resp:
-    exit(1)
-time.sleep(5)
-response_3 = user_ret(uid_3)
-if response_3 is None:
-    exit(1)
-check_retrieval(uid_3, test_data_3, response_3)
-print()
+tree_nodes,leaves = audit_tree()
 
-resp = host_ret(uid_2)
-if not resp:
-    exit(1)
-time.sleep(5)
-response_2 = user_ret(uid_2)
-if response_2 is not None: #MAX_retrieve = 2
-    exit(1)
-print("\n")
-
-audit(users=[(uid_1,secret_1), (uid_2,secret_2), (uid_3,secret_3)], retrievals=[(uid_1,secret_1), (uid_3,secret_3)])
-
-print("\nsuccess")
+for i in range(len(users_list)):
+    uid,test_data,color = users_list[i]
+    print(color+"Begin user",uid,"Auditing------------------------------------------------------------------------------------------------------",bcolors.ENDC)
+    audit_user(uid,None,tree_nodes,leaves,color)

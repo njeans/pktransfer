@@ -1,56 +1,50 @@
-/*
- * Copyright (C) 2011-2020 Intel Corporation. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above copyright
- *     notice, this list of conditions and the following disclaimer in
- *     the documentation and/or other materials provided with the
- *     distribution.
- *   * Neither the name of Intel Corporation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- */
-
+#include <clang-c/Index.h>  // This is libclang.
 #include "Enclave.h"
 #include "Enclave_t.h" /* print_string */
 #include <stdarg.h>
 #include <stdio.h> /* vsnprintf */
 #include <string.h>
+#include "sgx_tprotected_fs.h"
+#include "sgx_tseal.h"
+#include <stdlib.h>
 
-#include <iostream>
-// #include <clang-c/Index.h>  // This is libclang.
+void ecall_analyze_file(void* ptr, size_t len) {
 
-// #include <cxxopts.hpp>
+    CXUnsavedFile f = {};
+    f.Filename = "test.cpp";
+    f.Contents = (char *)ptr;
+    f.Length = len;
+    CXIndex index = clang_createIndex(0, 0);
+    CXTranslationUnit unit = clang_parseTranslationUnit(
+      index,
+      nullptr,
+      nullptr,
+      0,
+      &f,
+      1,
+      CXTranslationUnit_None);
+    if (unit == nullptr)
+    {
+      printf("Unable to parse translation unit. Quitting.");
+      return;
+    }
 
-#include <cppast/code_generator.hpp>         // for generate_code()
-// #include <cppast/cpp_entity_kind.hpp>        // for the cpp_entity_kind definition
-// #include <cppast/cpp_forward_declarable.hpp> // for is_definition()
-// #include <cppast/cpp_namespace.hpp>          // for cpp_namespace
-// #include <cppast/libclang_parser.hpp> // for libclang_parser, libclang_compile_config, cpp_entity,...
-// #include <cppast/visitor.hpp>         // for visit()
-//
-// /*
- * printf:
- *   Invokes OCALL to display the enclave buffer to the terminal.
- */
+    // CXCursor cursor = clang_getTranslationUnitCursor(unit);
+    // clang_visitChildren(
+    //   cursor,
+    //   [](CXCursor c, CXCursor parent, CXClientData client_data)
+    //   {
+    //     printf("Cursor %s of kind %s\n", clang_getCursorSpelling(c), clang_getCursorKindSpelling(clang_getCursorKind(c)));
+    //     return CXChildVisit_Recurse;
+    //   },
+    //   nullptr);
+    //
+    // clang_disposeTranslationUnit(unit);
+    // clang_disposeIndex(index);
+
+    printf("done");
+}
+
 int printf(const char* fmt, ...)
 {
     char buf[BUFSIZ] = { '\0' };
@@ -58,6 +52,7 @@ int printf(const char* fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, BUFSIZ, fmt, ap);
     va_end(ap);
+
     ocall_print_string(buf);
-    return (int)strnlen(buf, BUFSIZ - 1) + 1;
+    return 0;
 }

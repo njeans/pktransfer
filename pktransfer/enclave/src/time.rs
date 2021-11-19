@@ -81,6 +81,7 @@ fn timezonedb() -> Option<u64> {
             return None;
         }
     };
+
     let port = 443;
 
     let conn_addr = format!("{}:{}", host, port);

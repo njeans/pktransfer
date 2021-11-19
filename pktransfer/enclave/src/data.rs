@@ -42,7 +42,7 @@ pub struct RetreiveEntry
     pub countdown: u64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct AuditEntry {
     // pub enc_uid: Vec<u8>, TODO
     pub uid: u32,
@@ -67,8 +67,8 @@ pub struct Database {
 pub struct AuditDatabase {
     pub timestamp: u64,
     pub retrieve_count: u64,
-    pub users: Vec<Vec<u8>>,
-    pub retrieve: Vec<Vec<u8>>,
+    // pub users: Vec<Vec<u8>>,
+    // pub retrieve: Vec<Vec<u8>>,
     pub tree: merkletree::MerkleTree,
     pub max_count: u64,
     pub wait_time: u64,

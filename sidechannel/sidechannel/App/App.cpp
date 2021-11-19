@@ -41,6 +41,7 @@
 #include "sgx_urts.h"
 #include "App.h"
 #include "Enclave_u.h"
+#include "sgx_tprotected_fs.h"
 
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
@@ -186,7 +187,7 @@ int SGX_CDECL main(int argc, char *argv[])
 
     /* Initialize the enclave */
     if(initialize_enclave() < 0){
-        printf("Enter a character before exit Nerla...\n");
+        printf("App Error: Enter a character before exit ...\n");
         getchar();
         return -1;
     }
@@ -202,12 +203,17 @@ int SGX_CDECL main(int argc, char *argv[])
     ecall_libcxx_functions();
     ecall_thread_functions();
 
+    char file_data[] = "template <class T> bool f( T x ){return x % 2;}\0";
+
+    sgx_status_t ret  = ecall_analyze_file(global_eid, file_data, 48);
+    printf("sgx_status_t ret %d\n", ret);
+
     /* Destroy the enclave */
     sgx_destroy_enclave(global_eid);
 
-    printf("Info: SampleEnclave successfully returned Nerla.\n");
+    printf("App Info: SampleEnclave successfully returned Nerla.\n");
 
-    printf("Enter a character before exit Nerla...\n");
+    printf("App Enter a character before exit ... Nerla \n");
     getchar();
     return 0;
 }

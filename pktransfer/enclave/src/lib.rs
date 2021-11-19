@@ -371,8 +371,8 @@ pub extern "C" fn audit(out_serialized_ptr: * mut u8, max_size: usize, out_ptr_s
     let mut audit_db = data::AuditDatabase {
         timestamp: 0,
         retrieve_count: 0,
-        users: Vec::new(),
-        retrieve: Vec::new(),
+        // users: Vec::new(),
+        // retrieve: Vec::new(),
         tree: merkletree::MerkleTree::new(),
         max_count: 0,
         wait_time: 0,
@@ -388,9 +388,8 @@ pub extern "C" fn audit(out_serialized_ptr: * mut u8, max_size: usize, out_ptr_s
     audit_db.reset_time = database.reset_time;
 
     for (_, entry) in database.data.iter() {
+        // audit_db.users.push(entry.encrypted_secret.data().to_vec());
         println!("add users uid {:?}", entry.uid);
-        audit_db.users.push(entry.encrypted_secret.data().to_vec());
-        println!("end add users uid {:?}", entry.uid);
         let ae = data::AuditEntry{
             // enc_uid: entry.encrypted_secret.data().to_vec(), TODO
             uid: entry.uid,
@@ -399,15 +398,15 @@ pub extern "C" fn audit(out_serialized_ptr: * mut u8, max_size: usize, out_ptr_s
         };
         audit_entries.push(ae);
     }
-    for uid in database.completed_queue {
-        match database.data.get(&uid) {
-            Some(e) => {
-                println!("add users uid {:?}", e.uid);
-                audit_db.retrieve.push(e.encrypted_secret.data().to_vec());
-            }
-            None => {}
-        };
-    }
+    // for uid in database.completed_queue {
+    //     match database.data.get(&uid) {
+    //         Some(e) => {
+    //             println!("add users uid {:?}", e.uid);
+    //             audit_db.retrieve.push(e.encrypted_secret.data().to_vec());
+    //         }
+    //         None => {}
+    //     };
+    // }
 
     audit_db.tree = match merkletree::MerkleTree::build(&audit_entries){
         Ok(x) => x,

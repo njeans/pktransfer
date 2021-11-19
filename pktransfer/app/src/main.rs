@@ -55,9 +55,12 @@ extern {
 pub struct AuditDatabase {
     timestamp: u64,
     retrieve_count: u64,
-    users: Vec<Vec<u8>>,
-    retrieve: Vec<Vec<u8>>,
+    // users: Vec<Vec<u8>>,
+    // retrieve: Vec<Vec<u8>>,
     tree: MerkleTree,
+    pub max_count: u64,
+    pub wait_time: u64,
+    pub reset_time: u64,
 }
 
 type Hash = Vec<u8>;
@@ -68,6 +71,15 @@ pub struct MerkleTree {
     nodes: Vec<Hash>,
     count_internal_nodes: usize,
     count_leaves: usize,
+    leaves: Vec<AuditEntry>
+}
+
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+pub struct AuditEntry {
+    // pub enc_uid: Vec<u8>, TODO
+    pub uid: u32,
+    pub countdown: u64,
+    pub retrieve_count: u64
 }
 
 

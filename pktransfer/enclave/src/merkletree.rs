@@ -1,14 +1,8 @@
 use data;
 use std::vec::Vec;
-use sgx_tcrypto::*;
-// use sgx_types::SgxResult;
 
-// use std::collections::HashMap;
-// use std::untrusted::fs::File;
-// use std::io::{self, Read, Write};
-//
+use sgx_tcrypto::*;
 use sgx_types::*;
-// use sgx_tseal::{SgxSealedData};
 use sgx_types::marker::ContiguousMemory;
 
 type Hash = Vec<u8>;
@@ -49,10 +43,10 @@ impl MerkleTree {
                   return Err(err);
               }
           };
-          leaves.push(h)
+          leaves.push(h);
       }
 
-      MerkleTree::build_from_leaves(&leaves,values)
+      MerkleTree::build_from_leaves(&leaves,&values)
     }
 
 
@@ -67,24 +61,30 @@ impl MerkleTree {
             }
             Ok(_) => ()
         };
+
         Ok(MerkleTree {
             nodes:  nodes,
             count_internal_nodes: count_internal_nodes,
             count_leaves: count_leaves,
-            leaves:values.to_vec(),
+            leaves: values.to_vec(),
         })
     }
 }
 
 fn hash_leaf(value: &data::AuditEntry) -> SgxResult<Hash>
 {
-
-
-    match rsgx_sha256_slice(serde_cbor::to_vec(value).unwrap().as_slice()) {
+    let mut leaf_rep = [0_u8; 20];
+    leaf_rep[0..4].copy_from_slice(&u32_to_u8_array(value.uid));
+    leaf_rep[4..12].copy_from_slice(&u64_to_u8_array(value.countdown));
+    leaf_rep[12..20].copy_from_slice(&u64_to_u8_array(value.retrieve_count));
+    match rsgx_sha256_slice(&leaf_rep) {
         Err(err) => {
             return Err(err)
         },
-        Ok(res) => Ok(res.to_vec())
+        Ok(res) => {
+            println!("hash_leaf {:?} {:?} = {:?}",value.uid, leaf_rep,res);
+            return Ok(res.to_vec());
+        }
     }
 }
 
@@ -165,16 +165,18 @@ fn hash_internal_node(left: &Hash, right: Option<&Hash>) -> SgxResult<Hash>
         None => left.as_slice()
     };
     let comb = [left.clone().as_slice(),r].concat();
-
     match rsgx_sha256_slice(comb.as_slice()) {
         Err(err) => {
             return Err(err)
         },
-        Ok(res) => Ok(res.to_vec())
+        Ok(res) => {
+            println!("hash_internal_node_left={:?}",left);
+            println!("hash_internal_node_right={:?}",r);
+            println!("hash_internal_node_res={:?}",res);
+            return Ok(res.to_vec());
+        }
     }
 }
-
-
 
 fn next_power_of_2(n: usize) -> usize {
     let mut v = n;
@@ -188,13 +190,29 @@ fn next_power_of_2(n: usize) -> usize {
     v
 }
 
+fn u32_to_u8_array(x: u32) -> [u8; 4] {
+  let b1: u8 = ((x >> 24) & 0xff) as u8;
+  let b2: u8 = ((x >> 16) & 0xff) as u8;
+  let b3: u8 = ((x >> 8) & 0xff) as u8;
+  let b4: u8 = (x & 0xff) as u8;
+
+  [b1, b2, b3, b4]
+}
+
+fn u64_to_u8_array(x: u64) -> [u8; 8] {
+  let b1: u8 = ((x >> 56) & 0xff) as u8;
+  let b2: u8 = ((x >> 48) & 0xff) as u8;
+  let b3: u8 = ((x >> 40) & 0xff) as u8;
+  let b4: u8 = ((x >> 32) & 0xff) as u8;
+  let b5: u8 = ((x >> 24) & 0xff) as u8;
+  let b6: u8 = ((x >> 16) & 0xff) as u8;
+  let b7: u8 = ((x >> 8) & 0xff) as u8;
+  let b8: u8 = (x & 0xff) as u8;
+
+  [b1, b2, b3, b4, b5, b6, b7, b8]
+}
+
 pub trait AsBytes {
     /// Converts value into the byte slice.
     fn as_bytes(&self) -> &[u8];
 }
-
-// impl AsBytes for data::AuditEntry {
-//     fn as_bytes(&self) -> &[u8] {
-//         serde_cbor::to_vec(self).unwrap().as_slice()
-//     }
-// }

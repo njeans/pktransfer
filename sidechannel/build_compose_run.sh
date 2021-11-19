@@ -30,13 +30,11 @@
 #
 
 set -e
-docker build --target aesm --build-arg https_proxy=$https_proxy \
-             --build-arg http_proxy=$http_proxy -t sgx_aesm -f ./Dockerfile ./
+docker build  --target aesm --build-arg https_proxy=$https_proxy \
+              --build-arg http_proxy=$http_proxy -t sgx_aesm -f ./Dockerfile ./
+
+docker build --target sample --build-arg https_proxy=$https_proxy \
+             --build-arg http_proxy=$http_proxy -t sgx_sample -f ./Dockerfile ./
 
 docker volume create --driver local --opt type=tmpfs --opt device=tmpfs --opt o=rw aesmd-socket
-
-# If you use the Legacy Launch Control driver, replace /dev/sgx/enclave with /dev/isgx, and remove
-# --device=/dev/sgx/provision
-#docker run --env http_proxy --env https_proxy --device=/dev/sgx/enclave --device=/dev/sgx/provision -v /dev/log:/dev/log -v aesmd-socket:/var/run/aesmd -it sgx_aesm
-docker run --env http_proxy --env https_proxy --device=/dev/isgx  -v /dev/log:/dev/log -v aesmd-socket:/var/run/aesmd -it sgx_aesm
-
+docker-compose --verbose up

@@ -1,8 +1,9 @@
 
 echo "build_run.sh"
-# cargo
 
-make clean
+# make clean
 make
 cd bin
-./app
+./app > server.log &
+cd ..
+cat server.log

@@ -34,6 +34,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include "sgx_defs.h"
 
 #if defined(__cplusplus)
 extern "C" {
