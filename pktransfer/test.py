@@ -7,6 +7,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 import time
 import math
+import sys
 
 url = "http://localhost:8000"
 pk_file = "enclave_public_key.pem"
@@ -242,7 +243,9 @@ get_pk()
 
 users_list = [[1,"hello1",bcolors.USER1],[2,"hello2",bcolors.USER5],[3,"hello3",bcolors.USER3],[4,"hello4",bcolors.USER4]]
 user_secret = [0,0,0,0]
-only_audit = False #only run the auditing scheme
+only_audit = False
+if len(sys.argv) > 1 and sys.argv[1] == "audit":
+    only_audit = True #only run the auditing scheme
 if not only_audit:
     for i in range(len(users_list)):
         uid,test_data,color = users_list[i]
