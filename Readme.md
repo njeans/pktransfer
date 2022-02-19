@@ -2,10 +2,10 @@
 
 ## Demo Steps
 * build Dockerfile `build.sh`
-* run bulletin board `docker run --name pktransferganache -it --publish 8545:8545 trufflesuite/ganache-cli:latest --accounts 10 --debug`
+* run bulletin board `./run_ganache.sh`
 * set `GANACHEIP` environment variable with:
 ```
-docker inspect ganache | grep IPAddress
+docker inspect pktransferganache | grep IPAddress
 ```
 * run Docker in simulation mode `run_sim.sh`
 * run full demo
