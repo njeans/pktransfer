@@ -1,14 +1,13 @@
 # secret data transfer enclave
 
-## Demo
+## Demo Steps
 * build Dockerfile `build.sh`
-* run Docker `run.sh`
 * run bulletin board `docker run --name pktransferganache -it --publish 8545:8545 trufflesuite/ganache-cli:latest --accounts 10 --debug`
-* set `GANACHEIP` environment variable
+* set `GANACHEIP` environment variable with:
 ```
 docker inspect ganache | grep IPAddress
 ```
-* run Docker in simulation `run_sim.sh`
+* run Docker in simulation mode `run_sim.sh`
 * run full demo
 ```
 make
