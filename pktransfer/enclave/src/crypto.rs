@@ -1,10 +1,11 @@
 
 use std::vec::Vec;
+use std::string::String;
 
 use sgx_types::*;
 use sgx_tcrypto::*;
 
-use ring::{aead, error};
+use ring::{aead, error, signature};
 
 pub const SECRET_DATA_LEN: usize = 256;
 pub const RETREIVE_SECRET_LEN: usize = 364;
@@ -127,7 +128,7 @@ impl RSAKeyPair {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Default, Debug)]
 pub struct RSAPublicKey {
     mod_size: i32,
     exp_size: i32,
@@ -143,6 +144,26 @@ impl RSAPublicKey {
             n: SecretData::new(),
             e: [0; 4],
         }
+    }
+
+    pub fn build(n: [u8; 256], e: [u8; 4]) -> RSAPublicKey {
+        let mut public_key = RSAPublicKey{
+            mod_size: 256,
+            exp_size: 4,
+            n: SecretData::new_data(&n, 256 as usize),
+            e: [0; 4],
+        };
+        public_key.e.copy_from_slice(&e);
+        return public_key;
+    }
+
+    pub fn public_key(&self, pubkey: &SgxRsaPubKey) -> sgx_status_t {
+        let result = pubkey.create(self.mod_size, self.exp_size, &self.n.data(), &self.e);
+        match result {
+            Err(x) => return x,
+            Ok(()) => {}
+        };
+        sgx_status_t::SGX_SUCCESS
     }
 
     pub fn get_n(&self) -> [u8; 256] {
@@ -267,6 +288,67 @@ pub fn encrypt_aead(ciphertext: &mut Vec<u8>, plaintext: &[u8; SECRET_DATA_LEN],
             return Err(e);
         }
     }
+}
+
+pub fn verify_ecdsa(data: &[u8], sig: ECCSig, pubkey: ECCPublicKey) -> bool{
+    let ecc_handle = SgxEccHandle::new();
+    let _result = ecc_handle.open();
+    let mut public = sgx_ec256_public_t::default();
+    public.gx = pubkey.x;
+    public.gy = pubkey.y;
+    let mut signature = sgx_ec256_signature_t::default();
+    let mut tmp = [0_u8; 4];
+    tmp.copy_from_slice(&sig.x[0..4]);
+    signature.x[0] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[4..8]);
+    signature.x[1] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[8..12]);
+    signature.x[2] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[12..16]);
+    signature.x[3] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[16..20]);
+    signature.x[4] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[20..24]);
+    signature.x[5] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[24..28]);
+    signature.x[6] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[28..32]);
+    signature.x[7] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.x[0..4]);
+    signature.y[0] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.y[4..8]);
+    signature.y[1] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.y[8..12]);
+    signature.y[2] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.y[12..16]);
+    signature.y[3] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.y[16..20]);
+    signature.y[4] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.y[20..24]);
+    signature.y[5] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.y[24..28]);
+    signature.y[6] = u32::from_be_bytes(tmp);
+    tmp.copy_from_slice(&sig.y[28..32]);
+    signature.y[7] = u32::from_be_bytes(tmp);
+    match ecc_handle.ecdsa_verify_slice(data,&public,&signature) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("error verify_rsa {:?}",e);
+            false
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Default, Debug)]
+pub struct ECCPublicKey {
+    pub x: [u8; SGX_ECP256_KEY_SIZE],
+    pub y: [u8; SGX_ECP256_KEY_SIZE],
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Default, Debug)]
+pub struct ECCSig {
+    pub x: [u8; SGX_ECP256_KEY_SIZE],
+    pub y: [u8; SGX_ECP256_KEY_SIZE],
 }
 
 pub struct OneNonceSequence(Option<aead::Nonce>);

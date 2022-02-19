@@ -4,6 +4,7 @@ use merkletree;
 
 use std::vec::Vec;
 use std::collections::HashMap;
+use std::string::String;
 use std::untrusted::fs::File;
 use std::io::{self, Read, Write};
 
@@ -13,7 +14,7 @@ use sgx_types::marker::ContiguousMemory;
 
 pub const DATAFILE: &str = "data.sealed";
 pub const SEAL_LOG_SIZE: usize = 4096*2;     // Maximum data can seal in bytes -> smaller than "HeapMaxSize" in Enclave.config.xml
-pub const RESET_SECONDS: u64 = 86400*24000; //24 hours
+pub const RESET_SECONDS: u64 = 86400*24000; //24 hours time between database is reset
 // pub const RESET_SECONDS: u64 = 60;
 pub const MAX_RETREIVE: u64 = 2;
 pub const COUNTDOWN_TIME: u64 = 5;//24*60*60;
@@ -30,10 +31,11 @@ pub enum Error {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Entry {
    pub count: u64,
+   pub cancel_key: crypto::ECCPublicKey,
    pub secret: crypto::SecretData,
    pub encrypted_secret: crypto::SecretData,
    pub uid: u32,
-   pub last_retrieve: u64,
+   pub last_retrieve: u64, //time when retreive can be completed
 }
 
 pub struct RetreiveEntry
@@ -46,6 +48,7 @@ pub struct RetreiveEntry
 pub struct AuditEntry {
     // pub enc_uid: Vec<u8>, TODO
     pub uid: u32,
+    pub cancel_key: crypto::ECCPublicKey,
     pub countdown: u64,
     pub retrieve_count: u64
 }
@@ -57,7 +60,7 @@ pub struct Database {
     pub retrieve_queue: HashMap<u32, u64>, //all started and not completed retrieves
     pub completed_queue: Vec<u32>, //completed on that day
     pub rsa_key: crypto::RSAKeyPair,
-    pub timestamp: u64,
+    pub timestamp: u64, //timestamp of creation of database. when updated set to timestamp + reset_time
     pub max_count: u64,
     pub wait_time: u64,
     pub reset_time: u64,
@@ -89,10 +92,11 @@ pub fn build_database(rsa_key: crypto::RSAKeyPair) -> Database {
     }
 }
 
-pub fn build_entry(uid: u32, secret: &[u8; crypto::SECRET_DATA_LEN], len: usize,  encrypted_secret: &[u8; crypto::SECRET_DATA_LEN]) -> Entry {
+pub fn build_entry(uid: u32, cancel_key: crypto::ECCPublicKey, secret: &[u8; crypto::SECRET_DATA_LEN], secret_len: usize,  encrypted_secret: &[u8; crypto::SECRET_DATA_LEN]) -> Entry {
     Entry {
         uid: uid,
-        secret: crypto::SecretData::new_data(secret, len),
+        secret: crypto::SecretData::new_data(secret, secret_len),
+        cancel_key: cancel_key,
         encrypted_secret: crypto::SecretData::new_data(encrypted_secret, crypto::SECRET_DATA_LEN),
         count: 0,
         last_retrieve: 0,
@@ -164,17 +168,17 @@ fn recover_db_for_serializable(sealed_log: * mut u8, sealed_log_size: u32) -> Re
     let curr_time = time::get_timestamp();
     println!("curr_time {}  data.timestamp {}", curr_time, data.timestamp);
     let mut time_since_reset = data.timestamp - curr_time;
-    // if  time_since_reset >= data.reset_time {
-    //     println!("time_since_reset {} {}", time_since_reset,  data.reset_time);
-    //     data.count = 0;
-    //     while time_since_reset >= data.reset_time {
-    //         time_since_reset = data.timestamp - curr_time;
-    //         data.timestamp = data.timestamp + data.reset_time;
-    //     }
-    //
-    //     println!("reset timestamp to {}", data.timestamp);
-    //      data.completed_queue = Vec::new();
-    // }
+    if  time_since_reset >= data.reset_time {
+        println!("time_since_reset {} {}", time_since_reset,  data.reset_time);
+        data.count = 0;
+        while time_since_reset >= data.reset_time {
+            time_since_reset = data.timestamp - curr_time;
+            data.timestamp = data.timestamp + data.reset_time;
+        }
+
+        println!("reset timestamp to {}", data.timestamp);
+         data.completed_queue = Vec::new();
+    }
     println!("recovered db {:?}", data);
 
     Ok(data)

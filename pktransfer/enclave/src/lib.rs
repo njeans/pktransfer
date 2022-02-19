@@ -60,6 +60,7 @@ pub const UID_SIZE: usize = 4;
 #[no_mangle]
 pub extern "C" fn init_db(out_encoded_public_key_n: &mut [u8; crypto::SECRET_DATA_LEN], out_encoded_public_key_e: &mut [u8; 4]) -> sgx_status_t {
     println!("Init db");
+
     match File::open(data::DATAFILE) {
         Ok(_) => {
             println!("data::DATAFILE exists");
@@ -104,7 +105,7 @@ pub extern "C" fn init_db(out_encoded_public_key_n: &mut [u8; crypto::SECRET_DAT
 }
 
 #[no_mangle]
-pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize) -> sgx_status_t {
+pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize, cancel_public_key_x: &mut [u8; 32], cancel_public_key_y: &mut [u8; 32]) -> sgx_status_t {
     println!("sign up");
     if secret_size != crypto::SECRET_DATA_LEN {
         println!("secret_size {} must be {}", secret_size, crypto::SECRET_DATA_LEN);
@@ -145,7 +146,7 @@ pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize) ->
 
         }
         e => {
-            println!("Error decrypt encrypted_retreival_key {:}",e);
+            println!("Error decrypt encrypted_secret {:}",e);
             return e;
         }
     };
@@ -156,13 +157,15 @@ pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize) ->
     uid_arr.copy_from_slice(uid_entry);
     let uid = u32::from_be_bytes(uid_arr);
     println!("uid {:?}",uid);
-    let _ = io::stdout().write(&decrypted_secret);
-    println!("\n");
+
+    let cancel_key = crypto::ECCPublicKey{x: *cancel_public_key_x, y:*cancel_public_key_y};
+
     if database.data.contains_key(&uid) {
         println!("Error uid already found");
         return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
     } else {
-        let entry = data::build_entry(uid, &decrypted_secret, decrypted_secret_len, &encrypted_secret);
+
+        let entry = data::build_entry(uid, cancel_key, &decrypted_secret, decrypted_secret_len, &encrypted_secret);
         database.data.insert(uid, entry);
         let mut sealed_log_in = [0u8; data::SEAL_LOG_SIZE];
         let p = data::DATAFILE;
@@ -183,6 +186,7 @@ pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize) ->
 #[no_mangle]
 pub extern "C" fn host_retrieve(uid: u32) -> sgx_status_t {
     println!("host_retrieve enclave");
+    println!("host_retrieve uid {:?}",uid);
 
     let mut database: data::Database = match data::unseal_db_wrapper() {
         Ok(x) => x,
@@ -357,6 +361,67 @@ pub extern "C" fn user_retrieve(uid: u32, encrypted_retreival_key_ptr: *const u8
 }
 
 #[no_mangle]
+pub extern "C" fn cancel(uid: u32, data_ptr: *const u8, data_size: usize, cancel_sig_x: &mut [u8; 32], cancel_sig_y: &mut [u8; 32]) -> sgx_status_t {
+    println!("cancel enclave");
+    // println!("cancel uid {:?}",uid);
+
+    let data_slice = unsafe { slice::from_raw_parts(data_ptr, data_size) };
+    println!("data_slice {:?}", data_slice);
+
+    let mut database: data::Database = match data::unseal_db_wrapper() {
+        Ok(x) => x,
+        Err(_) => {
+            println!("Error data::unseal_db_wrapper");
+            return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+        }
+    };
+    if !database.data.contains_key(&uid) {
+        println!("Error uid not found in data");
+        return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+    }
+
+    if !database.retrieve_queue.contains_key(&uid) {
+        println!("Error uid not found in retrieve_queue");
+      return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+    } else {
+        let mut curr_entry: &mut data::Entry  = database.data.get_mut(&uid).unwrap();
+        let cancel_sig = crypto::ECCSig{x: *cancel_sig_x, y:*cancel_sig_y};
+
+        match crypto::verify_ecdsa(data_slice, cancel_sig, curr_entry.cancel_key) {
+            true => {},
+            false => {
+                println!("Error verifying signature");
+                return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+            }
+        }
+        println!("Cancel signature verified");
+
+        match database.retrieve_queue.remove(&uid) {
+            None => {
+                println!("Error removing entry from retrieve_queue");
+                return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+            }
+            Some(_) => {}
+        }
+
+        let mut entry: &mut data::Entry  = database.data.get_mut(&uid).unwrap();
+        entry.last_retrieve = 0;
+
+        let mut sealed_log_in = [0u8; data::SEAL_LOG_SIZE];
+        let p = data::DATAFILE;
+        println!("final database {:?}", database);
+        match data::create_sealeddata_for_db(database, &mut sealed_log_in) {
+            sgx_status_t::SGX_SUCCESS => {
+                return data::save_sealed_data(&p, &sealed_log_in);
+            }
+            _ => {
+                return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+            }
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn audit(out_serialized_ptr: * mut u8, max_size: usize, out_ptr_size: *mut usize) -> sgx_status_t {
     println!("audit enclave");
 
@@ -395,6 +460,7 @@ pub extern "C" fn audit(out_serialized_ptr: * mut u8, max_size: usize, out_ptr_s
             uid: entry.uid,
             countdown: entry.last_retrieve,
             retrieve_count: entry.count,
+            cancel_key: entry.cancel_key,// TODO
         };
         audit_entries.push(ae);
     }

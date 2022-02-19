@@ -3,8 +3,12 @@
 ## Demo
 * build Dockerfile `build.sh`
 * run Docker `run.sh`
+* run bulletin board `docker run --name pktransferganache -it --publish 8545:8545 trufflesuite/ganache-cli:latest --accounts 10 --debug`
+* set `GANACHEIP` environment variable
+```
+docker inspect ganache | grep IPAddress
+```
 * run Docker in simulation `run_sim.sh`
-
 * run full demo
 ```
 make
@@ -22,7 +26,7 @@ cd ..
 python3 test.py audit
 ```
 
-* reset demo by deleting `bin/data.sealed`
+* reset demo by deleting `bin/data.sealed` and restarting bulleting board
 
 ## pktransfer code
 ### pktransfer/app/src/main.rs

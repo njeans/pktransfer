@@ -28,9 +28,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.72"
+version = "1.0.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22a9137b95ea06864e018375b72adfb7db6e6f68cfc8df5a04d00288050485ee"
+checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
 
 [[package]]
 name = "cfg-if"
@@ -46,7 +46,7 @@ checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "hashbrown_tstd"
-version = "0.9.0"
+version = "0.11.2"
 
 [[package]]
 name = "http_req"
@@ -79,18 +79,18 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.32"
+version = "1.0.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba508cc11742c0dc5c1659771673afbab7a0efab23aa17e854cbab0837ed0b43"
+checksum = "c7342d5883fbccae1cc37a2353b09c87c9b0f3afd73f5fb9bba687a1f733b029"
 dependencies = [
  "unicode-xid",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.10"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38bc8cc6a5f2e3655e0899c1b848643b2562f853f114bfec7be120678e3ace05"
+checksum = "864d3e96a899863136fc6e99f3d7cae289dafe43bf2c5ac19b70df7210c0a145"
 dependencies = [
  "proc-macro2",
 ]
@@ -121,9 +121,9 @@ dependencies = [
 
 [[package]]
 name = "ryu"
-version = "1.0.5"
+version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
+checksum = "73b4b750c782965c211b42f022f59af1fbceabdd026623714f104152f1ec149f"
 
 [[package]]
 name = "sct"
@@ -176,11 +176,11 @@ dependencies = [
 
 [[package]]
 name = "sgx_alloc"
-version = "1.1.3"
+version = "1.1.4"
 
 [[package]]
 name = "sgx_backtrace_sys"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "cc",
  "sgx_build_helper",
@@ -189,29 +189,29 @@ dependencies = [
 
 [[package]]
 name = "sgx_build_helper"
-version = "0.1.3"
+version = "1.1.4"
 
 [[package]]
 name = "sgx_demangle"
-version = "1.1.3"
+version = "1.1.4"
 
 [[package]]
 name = "sgx_libc"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "sgx_types",
 ]
 
 [[package]]
 name = "sgx_tcrypto"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "sgx_types",
 ]
 
 [[package]]
 name = "sgx_tprotected_fs"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "sgx_trts",
  "sgx_types",
@@ -219,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "sgx_trts"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "sgx_libc",
  "sgx_types",
@@ -227,14 +227,14 @@ dependencies = [
 
 [[package]]
 name = "sgx_tse"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "sgx_types",
 ]
 
 [[package]]
 name = "sgx_tseal"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "sgx_tcrypto",
  "sgx_trts",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "sgx_tstd"
-version = "1.1.3"
+version = "1.1.4"
 dependencies = [
  "hashbrown_tstd",
  "sgx_alloc",
@@ -259,11 +259,11 @@ dependencies = [
 
 [[package]]
 name = "sgx_types"
-version = "1.1.3"
+version = "1.1.4"
 
 [[package]]
 name = "sgx_unwind"
-version = "0.1.1"
+version = "1.1.4"
 dependencies = [
  "sgx_build_helper",
 ]
@@ -276,9 +276,9 @@ checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "syn"
-version = "1.0.81"
+version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2afee18b8beb5a596ecb4a2dce128c719b4ba399d34126b9e4396e3f9860966"
+checksum = "8a65b3f4ffa0092e9887669db0eae07941f023991ab58ea44da8fe8e2d511c6b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -308,9 +308,9 @@ checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "version_check"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
+checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "webpki"
@@ -333,52 +333,52 @@ dependencies = [
 
 [[patch.unused]]
 name = "sgx_cov"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_crypto_helper"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_rand"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_rand_derive"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_serialize"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_serialize_derive"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_serialize_derive_internals"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_tcrypto_helper"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_tdh"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_tkey_exchange"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_tunittest"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_ucrypto"
-version = "1.1.3"
+version = "1.1.4"
 
 [[patch.unused]]
 name = "sgx_urts"
-version = "1.1.3"
+version = "1.1.4"

@@ -39,11 +39,13 @@ static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 extern {
     fn init_db(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, n: * mut u8, e: * mut u8) -> sgx_status_t;
-    fn signup(eid: sgx_enclave_id_t, retval: *mut sgx_status_t,
-                     some_string: *const u8, len: usize) -> sgx_status_t;
+    fn signup(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, secret: *const u8, secret_len: usize,
+                     cancel_key_x: *const u8, cancel_key_y: *const u8) -> sgx_status_t;
     fn host_retrieve(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, uid: u32) -> sgx_status_t;
     fn user_retrieve(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, uid: u32,
                         some_string: *const u8, len: usize, encrypted_secret: &mut [u8;RETREIVE_SECRET_LEN]) -> sgx_status_t;
+    fn cancel(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, uid: u32, secret: *const u8, secret_len: usize,
+                     cancel_sig_x: *const u8, cancel_sig_y: *const u8) -> sgx_status_t;
     fn audit(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, db: * mut u8, max_len: usize, out_len: *mut usize) -> sgx_status_t;
     fn public_key(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, n: * mut u8, e: * mut u8) -> sgx_status_t;
     fn update_reset_time(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, value: u64) -> sgx_status_t;
@@ -65,6 +67,11 @@ pub struct AuditDatabase {
 
 type Hash = Vec<u8>;
 
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+struct PK {
+    x: String,
+    y: String,
+}
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct MerkleTree {
@@ -86,6 +93,7 @@ pub struct AuditEntry {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SignupReq {
    secret: String,
+   cancel_key: PK,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -97,6 +105,13 @@ pub struct HostReq {
 pub struct UserReq {
    uid: u32,
    secret: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct CancelReq {
+    uid: u32,
+    signature: PK,
+    data: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -179,8 +194,8 @@ fn main() {
                 let secret = match base64::decode(signup_req.secret) {
                     Ok(x) => x,
                     Err(e) => {
-                        println!("decoding base64 {} request {:#?}", e, request);
-                        return rouille::Response::text(format!("Error decoding base64 {} request {:#?}", e, request)).with_status_code(400);
+                        println!("error decoding base64 secret {} request {:#?}", e, request);
+                        return rouille::Response::text(format!("Error decoding base64 secret {} request {:#?}", e, request)).with_status_code(400);
                     }
                 };
 
@@ -188,13 +203,37 @@ fn main() {
                     return rouille::Response::text(format!("Error parsing body secret len is {} not {}", secret.len(), SECRET_LEN)).with_status_code(400);
                 }
 
+                let x = match base64::decode(signup_req.cancel_key.x) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("error decoding base64 cancel_key x request {:#?}", request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
+                let y = match base64::decode(signup_req.cancel_key.y) {
+                    Ok(y) => y,
+                    Err(e) => {
+                        println!("error decoding base64 cancel_key y request {:#?}", request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
+                //
+                // if n.len() != SECRET_LEN {
+                //     return rouille::Response::text(format!("Error parsing body cancel_key n len is {} not {}", n.len(), SECRET_LEN)).with_status_code(400);
+                // }
+                // if e.len() != 4 {
+                //     return rouille::Response::text(format!("Error parsing body cancel_key e len is {} not {}", e.len(), 4)).with_status_code(400);
+                // }
+
                 let mut retval = sgx_status_t::SGX_SUCCESS;
 
                 let result = unsafe {
                     signup(eid,
                           &mut retval,
                           secret.as_ptr() as * const u8,
-                          secret.len())
+                          secret.len(),
+                          x.as_ptr() as * const u8,
+                          y.as_ptr() as * const u8)
                 };
 
                 match result {
@@ -302,13 +341,71 @@ fn main() {
 
                 rouille::Response::text(std::str::from_utf8(&encrypted_secret.to_vec()).unwrap())
             },
+            (POST) (/cancel) => {
+                println!("cancel request");
+                let cancel_req: CancelReq = try_or_400!(rouille::input::json_input(&request));
+                let data = match base64::decode(cancel_req.data) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("decoding base64 {} request {:#?}", e, request);
+                        return rouille::Response::text(format!("Error decoding base64 {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
+
+                // let sig = match base64::decode(cancel_req.signature) {
+                let x = match base64::decode(cancel_req.signature.x) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("error decoding base64 cancel_key x request {:#?}", request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
+                let y = match base64::decode(cancel_req.signature.y) {
+                    Ok(y) => y,
+                    Err(e) => {
+                        println!("error decoding base64 cancel_key y request {:#?}", request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
+
+                let mut retval = sgx_status_t::SGX_SUCCESS;
+                let result = unsafe {
+                    cancel(eid,
+                        &mut retval,
+                        cancel_req.uid,
+                        data.as_ptr() as * const u8,
+                        data.len(),
+                        x.as_ptr() as * const u8,
+                        y.as_ptr() as * const u8)
+                };
+
+                match result {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave result Failed {}!", result.as_str())).with_status_code(400);
+                    }
+                }
+
+                match retval {
+                    sgx_status_t::SGX_SUCCESS => {},
+                    _ => {
+                        println!("[-] ECALL Enclave Failed {}!", result.as_str());
+                        return rouille::Response::text(format!("ECALL Enclave function Failed {}!", retval.as_str())).with_status_code(400);
+
+                    }
+                }
+                println!("[+] cancel success...");
+
+                rouille::Response::text("success")
+            },
             (GET)  (/public_key) => {
-                #[derive(Serialize)]
-                struct PK {
+                #[derive(Serialize, Deserialize, Clone, Default, Debug)]
+                struct RSAPK {
                     n: String,
                     e: String,
-                };
-                rouille::Response::json(&PK{n: base64::encode(public_key_n), e: base64::encode(def_public_key_e)})
+                }
+                rouille::Response::json(&RSAPK{n: base64::encode(public_key_n), e: base64::encode(def_public_key_e)})
             },
             (GET)  (/audit) => {
                 println!("audit");

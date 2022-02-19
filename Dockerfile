@@ -1,7 +1,9 @@
 FROM baiduxlab/sgx-rust:1804-1.1.3
 #
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py >> setup.py && python3 setup.py
-RUN pip3 install requests pycryptodome
+RUN add-apt-repository -y ppa:ethereum/ethereum
+RUN apt-get update -y && apt-get -y install python3-dev libssl-dev solc
+RUN pip3 install requests pycryptodome cython py-solc-x web3
 
 RUN export SGX_MODE=SW
 RUN export SGX_SDK_RUST=/root/sgx/incubator-teaclave-sgx-sdk-master
