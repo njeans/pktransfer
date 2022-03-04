@@ -14,11 +14,13 @@ import math
 import sys
 from datetime import datetime
 import pprint
+import os
 
 from web3.providers.eth_tester import EthereumTesterProvider
 from web3 import Web3
 from solcx import compile_source
 
+GANACHEIP = os.getenv('GANACHEIP', '172.17.0.4')
 
 url = "http://localhost:8000"
 pk_file = "enclave_public_key.pem"
@@ -170,7 +172,7 @@ def compile_source_file(file_path):
     return compile_source(source,output_values=['abi', 'bin'])
 
 def setupW3():
-    provider = Web3.HTTPProvider('http://172.17.0.4:8545', request_kwargs={'timeout': 60})
+    provider = Web3.HTTPProvider(f'http://{GANACHEIP}:8545', request_kwargs={'timeout': 60})
     w3 = Web3(provider)
     admin = w3.eth.accounts[0]
     contract_source_path = '/root/sgx/samplecode/pktransfer/solidity/PKtransfercancel.sol'
@@ -327,7 +329,9 @@ def tmp():
     exit(0)
 
 
+# TODO probably need to uncomment to write the pub key to file
 # get_pk()
+
 # tmp()
 w3,contract,admin_addr = setupW3()
 users_list = [
