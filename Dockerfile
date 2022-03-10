@@ -15,8 +15,7 @@ ENV SGX_SDK_RUST=/root/sgx/incubator-teaclave-sgx-sdk-master
 
 RUN git clone https://github.com/apache/incubator-teaclave-sgx-sdk.git \
             /root/sgx/incubator-teaclave-sgx-sdk-master \
-        && cd /root/sgx/incubator-teaclave-sgx-sdk-master \
-        && git checkout e8a9fc22
+        && cd /root/sgx/incubator-teaclave-sgx-sdk-master 
 
 WORKDIR /root/sgx/samplecode/pktransfer
 
