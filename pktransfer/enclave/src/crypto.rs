@@ -290,50 +290,35 @@ pub fn encrypt_aead(ciphertext: &mut Vec<u8>, plaintext: &[u8; SECRET_DATA_LEN],
     }
 }
 
-pub fn verify_ecdsa(data: &[u8], sig: ECCSig, pubkey: ECCPublicKey) -> bool{
+pub fn verify_ecdsa(message_hash: &[u8; SGX_SHA256_HASH_SIZE], sig: ECCSig, pubkey: ECCPublicKey) -> bool{
+
     let ecc_handle = SgxEccHandle::new();
     let _result = ecc_handle.open();
+    let mut hash: sgx_sha256_hash_t = *message_hash;
     let mut public = sgx_ec256_public_t::default();
     public.gx = pubkey.x;
     public.gy = pubkey.y;
+
     let mut signature = sgx_ec256_signature_t::default();
     let mut tmp = [0_u8; 4];
-    tmp.copy_from_slice(&sig.x[0..4]);
-    signature.x[0] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[4..8]);
-    signature.x[1] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[8..12]);
-    signature.x[2] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[12..16]);
-    signature.x[3] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[16..20]);
-    signature.x[4] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[20..24]);
-    signature.x[5] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[24..28]);
-    signature.x[6] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[28..32]);
-    signature.x[7] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.x[0..4]);
-    signature.y[0] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.y[4..8]);
-    signature.y[1] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.y[8..12]);
-    signature.y[2] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.y[12..16]);
-    signature.y[3] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.y[16..20]);
-    signature.y[4] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.y[20..24]);
-    signature.y[5] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.y[24..28]);
-    signature.y[6] = u32::from_be_bytes(tmp);
-    tmp.copy_from_slice(&sig.y[28..32]);
-    signature.y[7] = u32::from_be_bytes(tmp);
-    match ecc_handle.ecdsa_verify_slice(data,&public,&signature) {
-        Ok(r) => r,
+    for n in 0..8 {
+        tmp.copy_from_slice(&sig.x[(n*4)..(n*4+4)]);
+        signature.x[7-n] = u32::from_le_bytes(tmp);
+        tmp.copy_from_slice(&sig.y[(n*4)..(n*4+4)]);
+        signature.y[7-n] = u32::from_le_bytes(tmp);
+    }
+
+    println!("test verify_ecdsa public \n\t{:?}\n\t{:?}",public.gx,public.gy);
+    println!("test verify_ecdsa message_hash \n\t{:?}",message_hash);
+    println!("test verify_ecdsa signature \n\t{:?}\n\t{:?}", signature.x,signature.y);
+
+    match ecc_handle.ecdsa_verify_hash(&hash,&public,&signature) {
+        Ok(r) => {
+            println!("verify_ecdsa result {:?}",r);
+            r
+        },
         Err(e) => {
-            println!("error verify_rsa {:?}",e);
+            println!("error verify_ecdsa {:?}",e);
             false
         }
     }

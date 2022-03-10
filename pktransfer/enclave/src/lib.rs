@@ -364,6 +364,10 @@ pub extern "C" fn user_retrieve(uid: u32, encrypted_retreival_key_ptr: *const u8
 pub extern "C" fn cancel(uid: u32, data_ptr: *const u8, data_size: usize, cancel_sig_x: &mut [u8; 32], cancel_sig_y: &mut [u8; 32]) -> sgx_status_t {
     println!("cancel enclave");
     // println!("cancel uid {:?}",uid);
+    if data_size != SGX_SHA256_HASH_SIZE {
+        println!("hash_data_size {} must be {}", data_size, SGX_SHA256_HASH_SIZE);
+        return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+    }
 
     let data_slice = unsafe { slice::from_raw_parts(data_ptr, data_size) };
     println!("data_slice {:?}", data_slice);
@@ -386,8 +390,9 @@ pub extern "C" fn cancel(uid: u32, data_ptr: *const u8, data_size: usize, cancel
     } else {
         let mut curr_entry: &mut data::Entry  = database.data.get_mut(&uid).unwrap();
         let cancel_sig = crypto::ECCSig{x: *cancel_sig_x, y:*cancel_sig_y};
-
-        match crypto::verify_ecdsa(data_slice, cancel_sig, curr_entry.cancel_key) {
+        let mut message_hash: [u8; SGX_SHA256_HASH_SIZE] =  Default::default();
+        message_hash.copy_from_slice(data_slice);
+        match crypto::verify_ecdsa(&message_hash, cancel_sig, curr_entry.cancel_key) {
             true => {},
             false => {
                 println!("Error verifying signature");

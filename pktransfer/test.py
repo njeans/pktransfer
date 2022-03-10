@@ -19,6 +19,8 @@ import os
 from web3.providers.eth_tester import EthereumTesterProvider
 from web3 import Web3
 from solcx import compile_source
+from eth_account.messages import encode_defunct
+import eth_account
 
 GANACHEIP = os.getenv('GANACHEIP', '172.17.0.4')
 
@@ -29,10 +31,10 @@ max_count = 2
 
 class bcolors:
     USER1 = '\033[95m'
-    USER2 = '\033[94m'
+    USER2 = '\033[93m'
     USER3 = '\033[96m'
     USER4 = '\033[92m'
-    USER5 = '\033[93m'
+    USER5 = '\033[94m'
     AUDIT = '\033[91m'
     ENDC = '\033[0m'
     BOLD = '\033[1m'
@@ -54,6 +56,9 @@ def decrypt_rsa(msg_plaintext, pem_filename):
 
 def int_to_bytes(val, num_bytes):
     return [(val & (0xff << pos*8)) >> pos*8 for pos in reversed(range(num_bytes))]
+
+def bytes_to_hex_trunc(x):
+    return "0x"+str(x.hex()[:10])+"..."
 
 def get_number_hex(values,reverse_values=True):
     total = 0
@@ -100,7 +105,6 @@ def helper(nodes,pos,curr,leaves):
         curr.right =  Tree()
         curr.right.data = nodes[right_pos-1]
         helper(nodes,right_pos,curr.right,leaves)
-
 
 def make_tree(nodes,leaves):
     root = Tree()
@@ -167,41 +171,63 @@ def check_path(path,leaf,color,entry):
         assert("0x"+h.hexdigest().lstrip("0")==get_number_hex(res,reverse_values=False))
 
 def compile_source_file(file_path):
+    base="/root/sgx/samplecode/pktransfer/solidity"
     with open(file_path, 'r') as f:
         source = f.read()
-    return compile_source(source,output_values=['abi', 'bin'])
+    return compile_source(source,
+        output_values=['abi', 'bin'],
+        base_path=base,
+        allow_paths=[base+"/openzeppelin-contracts"])
 
-def setupW3():
+def setupW3(audit):
     provider = Web3.HTTPProvider(f'http://{GANACHEIP}:8545', request_kwargs={'timeout': 60})
     w3 = Web3(provider)
     admin = w3.eth.accounts[0]
+    with open("/root/sgx/samplecode/pktransfer/accounts_info.json") as f:
+        accounts_info = json.loads(f.read())
     contract_source_path = '/root/sgx/samplecode/pktransfer/solidity/PKtransfercancel.sol'
     compiled_sol = compile_source_file(contract_source_path)
-    contract_id, contract_interface = compiled_sol.popitem()
-    contract_addresss = deploy_contract(w3, contract_interface,admin)
-    contract = w3.eth.contract(address=contract_addresss, abi=contract_interface["abi"])
-    return w3,contract,admin
+    abis = []
+    bins = ""
+    contract_id=""
+    for x in compiled_sol:
+        contract_id+=x
+        contract_interface=compiled_sol[x]
+        abis=abis+contract_interface['abi']
+        bins=bins+contract_interface['bin']
 
-def deploy_contract(w3, contract_interface,admin_addr):
-    tx_hash = w3.eth.contract(
-    abi=contract_interface['abi'],
-    bytecode=contract_interface['bin']).constructor().transact({"from":admin_addr})
+    if not audit:
+        contract_addresss,contract,_ = deploy_contract(w3, abis, bins,admin)
+        with open("contract_address.txt","w") as f:
+            f.write(contract_addresss)
+    else:
+        with open("contract_address.txt") as f:
+            contract_addresss=f.read()
+        _,contract,_ = deploy_contract(w3, abis, bins,admin, contract_address=contract_addresss)
+    print(f'Deployed {contract_id} to: {contract_addresss}')
+    return w3,contract,admin,accounts_info
+
+def deploy_contract(w3, abis,bins,admin_addr,contract_address=None):
+    print("contract_address",contract_address)
+    contract = w3.eth.contract(address=contract_address,abi=abis, bytecode=bins)
+    tx_hash = contract.constructor().transact({"from":admin_addr})
     address = w3.eth.get_transaction_receipt(tx_hash)['contractAddress']
-    return address
+    contract = w3.eth.contract(address=address, abi=abis)
+    return address,contract,tx_hash
 
 def send_tx(foo,user_addr):
     gas_estimate = foo.estimateGas()
     # print(f'\tGas estimate to transact: {gas_estimate}')
 
-    if gas_estimate < 100000:
+    if gas_estimate < 1000000:
          # print("\tSending transaction")
          tx_hash = foo.transact({"from":user_addr})
          receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
          # print("\tTransaction receipt mined:")
          # pprint.pprint(dict(receipt))
-         print("\tWas transaction successful?"+str(receipt["status"]))
+         # print("\tWas transaction successful?"+str(receipt["status"]))
     else:
-         print("Error! Gas cost exceeds 100000")
+         print("Error! Gas cost exceeds 1000000:",gas_estimate)
 
 def get_pk():
     get_pub_key_req = requests.get(url + '/public_key')
@@ -211,31 +237,40 @@ def get_pk():
     pk_data = json.loads(get_pub_key_req.content)
     n = int.from_bytes(bytearray(b64decode(pk_data["n"])), "little")
     e = int.from_bytes(bytearray(b64decode(pk_data["e"])), "little")
+
     pub = RSA.construct((n,e))
     pk_bytes = pub.export_key('PEM')
     with open(pk_file, "wb") as f:
         f.write(pk_bytes)
-    print("success download enclave public key into",pk_file,"\n")
+    print("success download enclave public key into",pk_file)
 
-def signup(uid, secret_data, cancel_public_key, w3addr):
-    message = uid.to_bytes(4, 'big')+(secret_data).encode('utf8')
+def signup(uid, secret_data, cancel_public_key, w3addr, color):
+    message = uid.to_bytes(4, 'big')+secret_data.encode('utf8')
     data = encrypt_rsa(message, pk_file)
+    x= int.from_bytes(bytearray(cancel_public_key[:32]),"big").to_bytes(32, byteorder='little')
+    y= int.from_bytes(bytearray(cancel_public_key[32:64]),"big").to_bytes(32, byteorder='little')
+    print(x)
+    print(y)
     signup_data = {
         "secret": str(b64encode(data).decode('UTF-8')),
         "cancel_key": {
-            "x": str(b64encode(int(cancel_public_key.pointQ.x).to_bytes(32, 'big')).decode('UTF-8')),
-            "y": str(b64encode(int(cancel_public_key.pointQ.y).to_bytes(32, 'big')).decode('UTF-8'))
+            "x": str(b64encode(x).decode('UTF-8')),
+            "y": str(b64encode(y).decode('UTF-8'))
             }
         }
-    print("signup_data",signup_data)
+
     signup_req = requests.post(url + "/signup", json=signup_data, headers={"Content-Type": "application/json"})
     if signup_req.status_code != 200:
         print("fail signup_req status_code != 200:", signup_req.status_code, signup_req.content)
         return
     ret = int_to_bytes(int.from_bytes(data, 'big', signed=False), 256)
-    public_key =  str(hex(int(cancel_public_key.pointQ.x)))+str(hex(int(cancel_public_key.pointQ.y)))
-    send_tx(contract.functions.new_user(bytearray(public_key,'utf-8')),w3addr)
-    print("Billboard updated for "+str(uid)+":",contract.functions.get_user().call({"from":w3addr}))
+    send_tx(contract.functions.new_user(bytearray(cancel_public_key)),w3addr)
+    user_info=contract.functions.get_user().call({"from":w3addr})
+    print(color+"Billboard updated for "+str(uid)+":",
+            "cancel_public_key",bytes_to_hex_trunc(user_info[0]),
+            "cancel_message",user_info[1],
+            "canceled?",user_info[2],
+            "timestamp",user_info[3],bcolors.ENDC)
     return ret
 
 def host_ret(uid):
@@ -255,7 +290,7 @@ def user_ret(uid):
 
     user_ret_req = requests.post(url + "/user", json=user_ret_data, headers={"Content-Type": "application/json"})
     if user_ret_req.status_code != 200:
-        print("fail user_ret_req status_code != 200:", user_ret_req.status_code, user_ret_req.content)
+        print("fail user_retreive_request status_code != 200:", user_ret_req.status_code, user_ret_req.content)
         return
 
     return_data = b64decode(user_ret_req.content)
@@ -270,21 +305,39 @@ def check_retrieval(uid, expected, plaintext,color):
     assert(str(plaintext) == str(uid_chr+expected))
     print(color+"check_retrieval returned:", str(get_number_hex([ord(x) for x in plaintext])), str(get_number([ord(x) for x in plaintext[:4]]))+","+"".join(plaintext[4:]),"expected:",str(uid)+","+expected,str(get_number_hex([ord(x) for x in uid_chr+expected])),bcolors.ENDC)
 
-def cancel_ret(uid,cancel_message,signature,message_hash,user_addr):
-    send_tx(contract.functions.cancel_message(message, message_hash, signature, int(round(datetime.now().timestamp()))), user_addr)
-    print("Billboard updated for "+str(uid)+":",contract.functions.get_user().call({"from":user_addr}))
+def cancel_ret(uid,cancel_message,signature,message_hash,ec_recover_args,user_addr,color):
+    send_tx(contract.functions.cancel_message(cancel_message,ec_recover_args[0], ec_recover_args[1], ec_recover_args[2],ec_recover_args[3], int(round(datetime.now().timestamp()))), user_addr)
+    user_info=contract.functions.get_user().call({"from":w3addr})
+    if user_info[4]==user_info[5]: #verification successful
+        print(color+"successful verification of signature",bcolors.ENDC)
+        print(color+"Billboard updated for "+str(uid)+":",
+                "cancel_public_key",bytes_to_hex_trunc(user_info[0]),
+                "cancel_message",user_info[1],
+                "canceled?",user_info[2],
+                "timestamp",user_info[3],bcolors.ENDC)
+    else:
+        print(color+"fail verification of signiture Billboard not updated",user_info[4],"!=",user_info[5],bcolors.ENDC)
+
+    # print(signature[:32])
+    # print(signature[32:64])
+    # print(message_hash)
+    x=int.from_bytes(signature[:32], "big").to_bytes(32, byteorder='little')
+    y=int.from_bytes(signature[32:64], "big").to_bytes(32, byteorder='little')
     cancel_ret_data = {
         "uid":uid,
-        "data":str(b64encode(cancel_message).decode('UTF-8')),
+        "data":str(b64encode(message_hash).decode('UTF-8')),
         "signature":{
-            "x": str(b64encode(signature[:32]).decode('UTF-8')),
-            "y": str(b64encode(signature[32:]).decode('UTF-8'))
-            }
+            "x": str(b64encode(x).decode('UTF-8')),
+            "y": str(b64encode(y).decode('UTF-8'))
+        }
     }
     cancel_ret_req = requests.post(url + "/cancel", json=cancel_ret_data, headers={"Content-Type": "application/json"})
+
+
     if cancel_ret_req.status_code != 200:
         print("fail cancel_ret_req status_code != 200:", cancel_ret_req.status_code, cancel_ret_req.content)
         return False
+
     return True
 
 def audit_tree():
@@ -315,83 +368,136 @@ def audit_user(uid,secret,tree_nodes,leaves,color):
             check_path(path,tree_nodes[leaf_index],color,leaves[i])
             print()
 
+def to_32byte_hex(val):
+    return Web3.toHex(Web3.toBytes(val).rjust(32, b'\0'))
 
-def tmp():
-    cancel_key = ECC.generate(curve='P-256')
-    uid = 2
-    test_data="hello 223"
-    secret = signup(uid, test_data, cancel_key.public_key())
-    cancel_message = SHA256.new( uid.to_bytes(4, 'big'))
-    signer = DSS.new(cancel_key, 'fips-186-3')
-    signature = signer.sign(cancel_message)
-    resp = host_ret(uid)
-    resp = cancel_ret(uid,cancel_message.digest(),signature)
-    exit(0)
+def load_eth_key(i):
+    user_addr=w3.eth.accounts[i]
+    private_key=get_number_hex(eth_accounts["addresses"][user_addr.lower()]["secretKey"]["data"],reverse_values=False)
+    pub_key=eth_accounts["addresses"][user_addr.lower()]["publicKey"]["data"]
+    return {"private_key":private_key,"public_key":pub_key}
 
+def ecdsa_sign(message,private_key):
+    msghash = encode_defunct(text=message)
+    signed_message=eth_account.Account.sign_message(msghash, private_key)
+    message_hash=Web3.toBytes(signed_message.messageHash).rjust(32, b'\0')
+    signature = Web3.toBytes(signed_message.signature).rjust(32, b'\0')
+    print("message_hash:",message_hash,"\n",to_32byte_hex(signed_message.messageHash),"\n",Web3.toBytes(signed_message.messageHash).rjust(32, b'\0'))
+    ec_recover_args = (
+        to_32byte_hex(signed_message.messageHash),
+        signed_message.v,
+        to_32byte_hex(signed_message.r),
+        to_32byte_hex(signed_message.s),
+        )
+    return message_hash,signature,ec_recover_args
 
-# TODO probably need to uncomment to write the pub key to file
-# get_pk()
-
-# tmp()
-w3,contract,admin_addr = setupW3()
-users_list = [
-                [1,"hello1",ECC.generate(curve='P-256'),bcolors.USER1,w3.eth.accounts[1]],
-                [2,"hello2",ECC.generate(curve='P-256'),bcolors.USER2,w3.eth.accounts[2]],
-                [3,"hello3",ECC.generate(curve='P-256'),bcolors.USER3,w3.eth.accounts[3]],
-                [4,"hello4",ECC.generate(curve='P-256'),bcolors.USER4,w3.eth.accounts[4]],
-                [5,"bye5",ECC.generate(curve='P-256'),bcolors.USER5,w3.eth.accounts[5]]
-            ]
-
-user_secret = [0,0,0,0,0]
 
 only_audit = False
 if len(sys.argv) > 1 and sys.argv[1] == "audit":
     only_audit = True #only run the auditing scheme
 
+def tmp():
+    cancel_key=users_list[0][2]
+    print("len cancel_key[\"public_key\"]",len(cancel_key["public_key"]))
+    message="test cancel"
+    message_hash,signature,ec_recover_args=ecdsa_sign(message, cancel_key["private_key"])
+    print("message_hash",message_hash)
+    exit(0)
+
+get_pk()
+
+w3,contract,admin_addr,eth_accounts = setupW3(only_audit)
+
+users_list = [
+    [1,"hello1",load_eth_key(1),bcolors.USER1,w3.eth.accounts[1]],
+    [2,"hello2",load_eth_key(2),bcolors.USER2,w3.eth.accounts[2]],
+    [3,"hello3",load_eth_key(3),bcolors.USER3,w3.eth.accounts[3]],
+    [4,"hello4",load_eth_key(4),bcolors.USER4,w3.eth.accounts[4]]
+]
+# tmp()
+
+user_secret = [0,0,0,0,0]
+t=2
+signup_list =[t]#list(range(len(users_list)))
+start_ret_list = [t]#[1,2,3]
+cancel_ret_list = [t]#[2]
+finish_ret_list = [t]#[2,3]
+
 if not only_audit:
-    for i in [4]:#range([4]):#[len(users_list)):
+    for i in signup_list:
         uid,test_data,cancel_key,color,w3addr = users_list[i]
-        secret = signup(uid, test_data, cancel_key.public_key(), w3addr)
+        print("addr",uid,w3addr)
+        secret = signup(uid, test_data, cancel_key["public_key"], w3addr,color)
         if secret is None:
             exit(1)
         print(color+"success signup user with uid",uid, "secret_data", test_data, "encrypted_secret_data", get_number_trunc(secret),bcolors.ENDC)
         user_secret[i]=secret
     print()
 
-    for i in [0,2,3,4]:
+    for i in start_ret_list:
         uid,test_data,cancel_key,color,w3addr = users_list[i]
         secret = user_secret[i]
         resp = host_ret(uid)
         if not resp:
             exit(1)
         print(color+"success started retrieve with host_retrieve api for uid:",uid,bcolors.ENDC)
+    print()
 
-    for i in [4]:
+    for i in cancel_ret_list:
         uid,test_data,cancel_key,color,w3addr = users_list[i]
-        message = b'\x19Ethereum Signed Message:\n'+uid.to_bytes(4, 'big')
-        message_hash = SHA256.new(message)
-        signer = DSS.new(cancel_key, 'fips-186-3')
-        signature = signer.sign(message_hash)
+        message = 'Cancel retreieve '+str(uid)
+        # message_hash = SHA256.new(message)
+        # signer = DSS.new(cancel_key, 'fips-186-3')
+        # signature = signer.sign(message_hash)
+        message_hash,signature,ec_recover_args=ecdsa_sign(message, cancel_key["private_key"])
         # resp = host_ret(uid)
-        resp = cancel_ret(uid,message,signature,message_hash.hexdigest(),w3addr)
-        if not resp:
-            exit(1)
-        print(color+"success started cancel retrieve for uid:",uid,bcolors.ENDC)
+        print("signature",len(signature))
+        resp = cancel_ret(uid,message,signature,message_hash,ec_recover_args,w3addr,color)
+        #cancel_ret(uid,cancel_message,signature,message_hash,ec_recover_args,user_addr,color):
 
-    for i in [3,4]:
+        if not resp:
+            print(color+"fail cancel retrieve for uid:",uid,bcolors.ENDC)
+        else:
+            print(color+"success cancel retrieve for uid:",uid,bcolors.ENDC)
+    print()
+
+    for i in finish_ret_list:
         uid,test_data,cancel_key,color,w3addr = users_list[i]
         response = user_ret(uid)
         if response is None:
-            print(color+"success completed retrieve with user_retrieve api for uid:",uid,bcolors.ENDC)
-        else:
             print(color+"FAIL completed retrieve with user_retrieve api for uid:",uid,bcolors.ENDC)
-        print()
+        else:
+            print(color+"success completed retrieve with user_retrieve api for uid:",uid,"retreived:",response,bcolors.ENDC)
+    print()
+
+    print("Summary:")
+    for i in list(range(len(users_list))):
+        uid = users_list[i][0]
+        color = users_list[i][3]
+        if i in signup_list and i in start_ret_list and i in cancel_ret_list and i in finish_ret_list:
+           print(color,"\t",uid,"Signed up, Started retrieve, Cancel retreive, Fail retreive",bcolors.ENDC)
+        elif i in signup_list and i in start_ret_list and i in finish_ret_list:
+           print(color,"\t",uid,"Signed up, Started retrieve, Completed Retreive",bcolors.ENDC)
+        elif i in signup_list and i in start_ret_list:
+           print(color,"\t",uid,"Signed up, Started retrieve",bcolors.ENDC)
+        elif i in signup_list:
+           print(color,"\t",uid,"Signed up",bcolors.ENDC)
+
+print("\n"+bcolors.AUDIT+"Public Audit Billboard------------------------------------------------------------------------------------------------------",bcolors.ENDC)
+for i in range(len(users_list)):
+    uid,test_data,cancel_key,color,w3addr = users_list[i]
+    user_info=contract.functions.get_user().call({"from":w3addr})
+    print(color+"Billboard status for "+str(uid)+":",
+            "cancel_public_key",bytes_to_hex_trunc(user_info[0]),
+            "cancel_message",user_info[1],
+            "canceled?",user_info[2],
+            "timestamp",user_info[3],bcolors.ENDC)
 
 print("\n"+bcolors.AUDIT+"Public Audit Website------------------------------------------------------------------------------------------------------",bcolors.ENDC)
 
 
 tree_nodes,leaves = audit_tree()
-print(list(map(get_number_trunc,tree_nodes)))
+
 
 for i in range(len(users_list)):
     uid,test_data,cancel_key,color,w3addr = users_list[i]

@@ -356,15 +356,16 @@ fn main() {
                 let x = match base64::decode(cancel_req.signature.x) {
                     Ok(x) => x,
                     Err(e) => {
-                        println!("error decoding base64 cancel_key x request {:#?}", request);
-                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                        println!("error decoding base64 cancel_sign x request {:#?}", request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_sign {} request {:#?}", e, request)).with_status_code(400);
                     }
                 };
+
                 let y = match base64::decode(cancel_req.signature.y) {
                     Ok(y) => y,
                     Err(e) => {
-                        println!("error decoding base64 cancel_key y request {:#?}", request);
-                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                        println!("error decoding base64 cancel_sign y request {:#?}", request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_sign {} request {:#?}", e, request)).with_status_code(400);
                     }
                 };
 
