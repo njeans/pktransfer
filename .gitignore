@@ -35,4 +35,5 @@ log*
 data.sealed
 lib/*
 pktransfer/server.log
-
+pktransfer/solidity/openzeppelin-contracts/
+pktransfer/solidity/elliptic-curve-solidity/
