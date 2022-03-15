@@ -36,4 +36,5 @@ data.sealed
 lib/*
 pktransfer/server.log
 pktransfer/solidity/openzeppelin-contracts/
-pktransfer/solidity/elliptic-curve-solidity/
+.remote-sync.json
+#pktransfer/solidity/build/

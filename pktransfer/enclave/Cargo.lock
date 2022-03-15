@@ -9,6 +9,7 @@ dependencies = [
  "base64",
  "http_req",
  "ring",
+ "secp256k1-sgx",
  "serde",
  "serde_cbor",
  "serde_derive",
@@ -69,6 +70,12 @@ source = "git+https://github.com/mesalock-linux/itoa-sgx#295ee451f5ec74f25c29955
 dependencies = [
  "sgx_tstd",
 ]
+
+[[package]]
+name = "libc"
+version = "0.2.120"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad5c14e80759d0939d013e6ca49930e59fc53dd8e5009132f76240c179380c09"
 
 [[package]]
 name = "log"
@@ -135,6 +142,16 @@ dependencies = [
  "ring",
  "sgx_tstd",
  "untrusted",
+]
+
+[[package]]
+name = "secp256k1-sgx"
+version = "0.1.0"
+source = "git+https://github.com/njeans/rust-secp256k1-sgx.git#686f6f0037058cc9c4c194b4c0fb126a074762ed"
+dependencies = [
+ "cc",
+ "libc",
+ "sgx_tstd",
 ]
 
 [[package]]

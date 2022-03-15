@@ -28,13 +28,13 @@ enclave {
 
         public sgx_status_t init_db([out, size=256] uint8_t* n,[out, size=4] uint8_t* e);
 
-        public sgx_status_t signup([in, size=secret_len] const uint8_t* secret_data, size_t secret_len, [in, size=32] const uint8_t* cancel_key_x, [in, size=32] const uint8_t* cancel_key_y);
+        public sgx_status_t signup([in, size=secret_len] const uint8_t* secret_data, size_t secret_len, [in, size=cancel_key_len] const uint8_t* cancel_key, size_t cancel_key_len);
 
         public sgx_status_t host_retrieve(uint32_t uid);
 
         public sgx_status_t user_retrieve(uint32_t uid, [in, size=len] const uint8_t* some_string, size_t len, [out, size=364] uint8_t* encrypted_data);
 
-        public sgx_status_t cancel(uint32_t uid, [in, size=data_len] const uint8_t* data, size_t data_len, [in, size=32] const uint8_t* cancel_sig_x, [in, size=32] const uint8_t* cancel_sig_y);
+        public sgx_status_t cancel(uint32_t uid, [in, size=hash_len] const uint8_t* hash, size_t hash_len, [in, size=sig_len] const uint8_t* sig, size_t sig_len);
 
         public sgx_status_t audit([out, size=max_len] uint8_t* db, size_t max_len, [out, size=8] size_t* out_len);
 

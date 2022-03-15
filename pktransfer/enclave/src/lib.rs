@@ -19,7 +19,7 @@
 #![crate_type = "staticlib"]
 #![cfg_attr(not(target_env = "sgx"), no_std)]
 #![cfg_attr(target_env = "sgx", feature(rustc_private))]
-
+#![cfg_attr(feature = "alloc", feature(alloc))]
 #[cfg(not(target_env = "sgx"))]
 #[macro_use]
 extern crate sgx_tstd as std;
@@ -37,6 +37,9 @@ extern crate serde_json;
 extern crate http_req;
 extern crate ring;
 extern crate base64;
+
+
+extern crate secp256k1;
 
 mod crypto;
 mod data;
@@ -105,7 +108,7 @@ pub extern "C" fn init_db(out_encoded_public_key_n: &mut [u8; crypto::SECRET_DAT
 }
 
 #[no_mangle]
-pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize, cancel_public_key_x: &mut [u8; 32], cancel_public_key_y: &mut [u8; 32]) -> sgx_status_t {
+pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize, cancel_public_key_ptr: *const u8, cancel_public_key_size: usize) -> sgx_status_t {
     println!("sign up");
     if secret_size != crypto::SECRET_DATA_LEN {
         println!("secret_size {} must be {}", secret_size, crypto::SECRET_DATA_LEN);
@@ -113,6 +116,15 @@ pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize, ca
     }
     let encrypted_secret_slice = unsafe { slice::from_raw_parts(encrypted_secret_ptr, secret_size) };
     println!("encrypted_secret_slice {:?}", encrypted_secret_slice);
+
+    if cancel_public_key_size != crypto::ECDSA_PK_LEN {
+        println!("cancel_public_key_size {} must be {}", cancel_public_key_size, crypto::ECDSA_PK_LEN);
+        return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+    }
+    let cancel_key = unsafe { slice::from_raw_parts(cancel_public_key_ptr, cancel_public_key_size) };
+    println!("cancel_key {:?}", cancel_key);
+
+    println!("sign up");
 
     let mut database = match data::unseal_db_wrapper() {
         Ok(x) => x,
@@ -158,7 +170,7 @@ pub extern "C" fn signup(encrypted_secret_ptr: *const u8, secret_size: usize, ca
     let uid = u32::from_be_bytes(uid_arr);
     println!("uid {:?}",uid);
 
-    let cancel_key = crypto::ECCPublicKey{x: *cancel_public_key_x, y:*cancel_public_key_y};
+    // let cancel_key = crypto::ECCPublicKey{x: *cancel_public_key_x, y:*cancel_public_key_y};
 
     if database.data.contains_key(&uid) {
         println!("Error uid already found");
@@ -361,9 +373,8 @@ pub extern "C" fn user_retrieve(uid: u32, encrypted_retreival_key_ptr: *const u8
 }
 
 #[no_mangle]
-pub extern "C" fn cancel(uid: u32, data_ptr: *const u8, data_size: usize, cancel_sig_x: &mut [u8; 32], cancel_sig_y: &mut [u8; 32]) -> sgx_status_t {
+pub extern "C" fn cancel(uid: u32, data_ptr: *const u8, data_size: usize, cancel_sig_ptr: *const u8, cancel_sig_size: usize) -> sgx_status_t {
     println!("cancel enclave");
-    // println!("cancel uid {:?}",uid);
     if data_size != SGX_SHA256_HASH_SIZE {
         println!("hash_data_size {} must be {}", data_size, SGX_SHA256_HASH_SIZE);
         return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
@@ -371,6 +382,14 @@ pub extern "C" fn cancel(uid: u32, data_ptr: *const u8, data_size: usize, cancel
 
     let data_slice = unsafe { slice::from_raw_parts(data_ptr, data_size) };
     println!("data_slice {:?}", data_slice);
+
+    if cancel_sig_size != crypto::ECDSA_SIG_LEN {
+        println!("cancel_sig_size {} must be {}", cancel_sig_size, crypto::ECDSA_SIG_LEN);
+        return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
+    }
+
+    let cancel_sig = unsafe { slice::from_raw_parts(cancel_sig_ptr, cancel_sig_size) };
+    println!("cancel_sig {:?}", cancel_sig);
 
     let mut database: data::Database = match data::unseal_db_wrapper() {
         Ok(x) => x,
@@ -389,10 +408,10 @@ pub extern "C" fn cancel(uid: u32, data_ptr: *const u8, data_size: usize, cancel
       return sgx_status_t::SGX_ERROR_INVALID_PARAMETER;
     } else {
         let mut curr_entry: &mut data::Entry  = database.data.get_mut(&uid).unwrap();
-        let cancel_sig = crypto::ECCSig{x: *cancel_sig_x, y:*cancel_sig_y};
-        let mut message_hash: [u8; SGX_SHA256_HASH_SIZE] =  Default::default();
-        message_hash.copy_from_slice(data_slice);
-        match crypto::verify_ecdsa(&message_hash, cancel_sig, curr_entry.cancel_key) {
+        // let cancel_sig = crypto::ECCSig{x: *cancel_sig_x, y:*cancel_sig_y};
+        // let mut message_hash: [u8; SGX_SHA256_HASH_SIZE] =  Default::default();
+        // message_hash.copy_from_slice(data_slice);
+        match crypto::verify_ecdsa_secp256k1(&data_slice, cancel_sig, &curr_entry.cancel_key) {
             true => {},
             false => {
                 println!("Error verifying signature");
@@ -465,7 +484,7 @@ pub extern "C" fn audit(out_serialized_ptr: * mut u8, max_size: usize, out_ptr_s
             uid: entry.uid,
             countdown: entry.last_retrieve,
             retrieve_count: entry.count,
-            cancel_key: entry.cancel_key,// TODO
+            cancel_key: entry.cancel_key.clone(),// TODO
         };
         audit_entries.push(ae);
     }

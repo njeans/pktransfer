@@ -31,7 +31,7 @@ pub enum Error {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Entry {
    pub count: u64,
-   pub cancel_key: crypto::ECCPublicKey,
+   pub cancel_key: Vec<u8>,
    pub secret: crypto::SecretData,
    pub encrypted_secret: crypto::SecretData,
    pub uid: u32,
@@ -48,7 +48,7 @@ pub struct RetreiveEntry
 pub struct AuditEntry {
     // pub enc_uid: Vec<u8>, TODO
     pub uid: u32,
-    pub cancel_key: crypto::ECCPublicKey,
+    pub cancel_key: Vec<u8>,
     pub countdown: u64,
     pub retrieve_count: u64
 }
@@ -92,11 +92,11 @@ pub fn build_database(rsa_key: crypto::RSAKeyPair) -> Database {
     }
 }
 
-pub fn build_entry(uid: u32, cancel_key: crypto::ECCPublicKey, secret: &[u8; crypto::SECRET_DATA_LEN], secret_len: usize,  encrypted_secret: &[u8; crypto::SECRET_DATA_LEN]) -> Entry {
+pub fn build_entry(uid: u32, cancel_key: &[u8], secret: &[u8; crypto::SECRET_DATA_LEN], secret_len: usize,  encrypted_secret: &[u8; crypto::SECRET_DATA_LEN]) -> Entry {
     Entry {
         uid: uid,
         secret: crypto::SecretData::new_data(secret, secret_len),
-        cancel_key: cancel_key,
+        cancel_key: Vec::from(cancel_key),
         encrypted_secret: crypto::SecretData::new_data(encrypted_secret, crypto::SECRET_DATA_LEN),
         count: 0,
         last_retrieve: 0,

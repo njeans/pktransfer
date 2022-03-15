@@ -167,9 +167,9 @@ library ECDSA {
 
         // If the signature is valid (and not malleable), return the signer address
         address signer = ecrecover(hash, v, r, s);
-        if (signer == address(0)) {
-            return (address(0), RecoverError.InvalidSignature);
-        }
+        //if (signer == address(0)) {
+        //    return (address(0), RecoverError.NoError);
+        //}
 
         return (signer, RecoverError.NoError);
     }

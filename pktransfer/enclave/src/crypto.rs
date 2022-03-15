@@ -1,14 +1,18 @@
 
 use std::vec::Vec;
 use std::string::String;
-
+use std::boxed::Box;
 use sgx_types::*;
 use sgx_tcrypto::*;
+use secp256k1;
 
 use ring::{aead, error, signature};
 
 pub const SECRET_DATA_LEN: usize = 256;
 pub const RETREIVE_SECRET_LEN: usize = 364;
+pub const ECDSA_SIG_LEN: usize = 64;
+pub const ECDSA_PK_LEN: usize = 65;
+
 //required because Serialize is only implemented for 32 length slice
 #[derive(Serialize, Deserialize, Clone, Copy, Default, Debug)]
 pub struct SecretData {
@@ -290,7 +294,7 @@ pub fn encrypt_aead(ciphertext: &mut Vec<u8>, plaintext: &[u8; SECRET_DATA_LEN],
     }
 }
 
-pub fn verify_ecdsa(message_hash: &[u8; SGX_SHA256_HASH_SIZE], sig: ECCSig, pubkey: ECCPublicKey) -> bool{
+pub fn verify_ecdsa_secp256r1(message_hash: &[u8; SGX_SHA256_HASH_SIZE], sig: ECCSig, pubkey: ECCPublicKey) -> bool{
 
     let ecc_handle = SgxEccHandle::new();
     let _result = ecc_handle.open();
@@ -322,6 +326,47 @@ pub fn verify_ecdsa(message_hash: &[u8; SGX_SHA256_HASH_SIZE], sig: ECCSig, pubk
             false
         }
     }
+}
+#[repr(C)] pub struct Context(c_int);
+
+pub fn verify_ecdsa_secp256k1(message_hash: &[u8], sig: &[u8], pubkey: &[u8]) -> bool{
+    println!("verify_ecdsa_secp256k1");
+
+    let secp = secp256k1::Secp256k1::verification_only();
+
+    let message = match secp256k1::Message::from_slice(message_hash) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("error verify_ecdsa_secp256k1 message {:?}",e);
+            return false;
+        }
+    };
+
+    let public_key = match secp256k1::key::PublicKey::from_slice(&secp, pubkey) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("error verify_ecdsa_secp256k1 public_key {:?}",e);
+            return false;
+        }
+    };
+    let signature = match secp256k1::Signature::from_compact(&secp, sig) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("error verify_ecdsa_secp256k1 signature {:?}",e);
+            return false;
+        }
+    };
+
+     match secp.verify(&message, &signature, &public_key){
+         Ok(r) => {
+             println!("verify_ecdsa_secp256k1 result {:?}",r);
+             true
+         },
+         Err(e) => {
+             println!("error verify_ecdsa_secp256k1 {:?}",e);
+            false
+        }
+     }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Default, Debug)]

@@ -34,18 +34,24 @@ use std::slice;
 pub const SECRET_LEN: usize = 256;
 pub const MAX_OUT_SIZE: usize = 4096;     // Maximum data can seal in bytes -> smaller than "HeapMaxSize" in Enclave.config.xml
 pub const RETREIVE_SECRET_LEN: usize = 364;
+pub const ECDSA_SIG_LEN: usize = 64;
+pub const ECDSA_PK_LEN: usize = 65;
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 extern {
     fn init_db(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, n: * mut u8, e: * mut u8) -> sgx_status_t;
     fn signup(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, secret: *const u8, secret_len: usize,
-                     cancel_key_x: *const u8, cancel_key_y: *const u8) -> sgx_status_t;
+                     cancel_key: *const u8, cancel_key_len: usize) -> sgx_status_t;
+    // fn signup(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, secret: *const u8, secret_len: usize,
+                     // cancel_key_x: *const u8, cancel_key_y: *const u8) -> sgx_status_t;
+
     fn host_retrieve(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, uid: u32) -> sgx_status_t;
     fn user_retrieve(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, uid: u32,
                         some_string: *const u8, len: usize, encrypted_secret: &mut [u8;RETREIVE_SECRET_LEN]) -> sgx_status_t;
-    fn cancel(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, uid: u32, secret: *const u8, secret_len: usize,
-                     cancel_sig_x: *const u8, cancel_sig_y: *const u8) -> sgx_status_t;
+    fn cancel(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, uid: u32, hash: *const u8, hash_len: usize,
+                        sig: *const u8, sig_len: usize) -> sgx_status_t;
+                     // cancel_sig_x: *const u8, cancel_sig_y: *const u8) -> sgx_status_t;
     fn audit(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, db: * mut u8, max_len: usize, out_len: *mut usize) -> sgx_status_t;
     fn public_key(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, n: * mut u8, e: * mut u8) -> sgx_status_t;
     fn update_reset_time(eid: sgx_enclave_id_t, retval: *mut sgx_status_t, value: u64) -> sgx_status_t;
@@ -93,7 +99,7 @@ pub struct AuditEntry {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SignupReq {
    secret: String,
-   cancel_key: PK,
+   cancel_key: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -110,7 +116,7 @@ pub struct UserReq {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CancelReq {
     uid: u32,
-    signature: PK,
+    signature: String,
     data: String,
 }
 
@@ -199,24 +205,37 @@ fn main() {
                     }
                 };
 
+                let cancel_key = match base64::decode(signup_req.cancel_key) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        println!("error decoding base64 cancel_key {} request {:#?}", e, request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                    }
+                };
+
+
                 if secret.len() != SECRET_LEN {
                     return rouille::Response::text(format!("Error parsing body secret len is {} not {}", secret.len(), SECRET_LEN)).with_status_code(400);
                 }
 
-                let x = match base64::decode(signup_req.cancel_key.x) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        println!("error decoding base64 cancel_key x request {:#?}", request);
-                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
-                    }
-                };
-                let y = match base64::decode(signup_req.cancel_key.y) {
-                    Ok(y) => y,
-                    Err(e) => {
-                        println!("error decoding base64 cancel_key y request {:#?}", request);
-                        return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
-                    }
-                };
+                if cancel_key.len() != ECDSA_PK_LEN {
+                    return rouille::Response::text(format!("Error parsing body cancel_key len is {} not {}", cancel_key.len(), ECDSA_PK_LEN)).with_status_code(400);
+                }
+                //
+                // let x = match base64::decode(signup_req.cancel_key.x) {
+                //     Ok(x) => x,
+                //     Err(e) => {
+                //         println!("error decoding base64 cancel_key x request {:#?}", request);
+                //         return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                //     }
+                // };
+                // let y = match base64::decode(signup_req.cancel_key.y) {
+                //     Ok(y) => y,
+                //     Err(e) => {
+                //         println!("error decoding base64 cancel_key y request {:#?}", request);
+                //         return rouille::Response::text(format!("Error decoding base64 cancel_key {} request {:#?}", e, request)).with_status_code(400);
+                //     }
+                // };
                 //
                 // if n.len() != SECRET_LEN {
                 //     return rouille::Response::text(format!("Error parsing body cancel_key n len is {} not {}", n.len(), SECRET_LEN)).with_status_code(400);
@@ -232,8 +251,8 @@ fn main() {
                           &mut retval,
                           secret.as_ptr() as * const u8,
                           secret.len(),
-                          x.as_ptr() as * const u8,
-                          y.as_ptr() as * const u8)
+                          cancel_key.as_ptr() as * const u8,
+                          cancel_key.len())
                 };
 
                 match result {
@@ -352,22 +371,24 @@ fn main() {
                     }
                 };
 
-                // let sig = match base64::decode(cancel_req.signature) {
-                let x = match base64::decode(cancel_req.signature.x) {
+                let sig = match base64::decode(cancel_req.signature) {
                     Ok(x) => x,
                     Err(e) => {
-                        println!("error decoding base64 cancel_sign x request {:#?}", request);
-                        return rouille::Response::text(format!("Error decoding base64 cancel_sign {} request {:#?}", e, request)).with_status_code(400);
+                        println!("error decoding base64 cancel_req.signature x request {:#?}", request);
+                        return rouille::Response::text(format!("Error decoding base64 cancel_req.signature {} request {:#?}", e, request)).with_status_code(400);
                     }
                 };
+                if sig.len() != ECDSA_SIG_LEN {
+                    return rouille::Response::text(format!("Error parsing body signature len is {} not {}", sig.len(), ECDSA_SIG_LEN)).with_status_code(400);
+                }
 
-                let y = match base64::decode(cancel_req.signature.y) {
-                    Ok(y) => y,
-                    Err(e) => {
-                        println!("error decoding base64 cancel_sign y request {:#?}", request);
-                        return rouille::Response::text(format!("Error decoding base64 cancel_sign {} request {:#?}", e, request)).with_status_code(400);
-                    }
-                };
+                // let y = match base64::decode(cancel_req.signature.y) {
+                //     Ok(y) => y,
+                //     Err(e) => {
+                //         println!("error decoding base64 cancel_sign y request {:#?}", request);
+                //         return rouille::Response::text(format!("Error decoding base64 cancel_sign {} request {:#?}", e, request)).with_status_code(400);
+                //     }
+                // };
 
                 let mut retval = sgx_status_t::SGX_SUCCESS;
                 let result = unsafe {
@@ -376,8 +397,8 @@ fn main() {
                         cancel_req.uid,
                         data.as_ptr() as * const u8,
                         data.len(),
-                        x.as_ptr() as * const u8,
-                        y.as_ptr() as * const u8)
+                        sig.as_ptr() as * const u8,
+                        sig.len())
                 };
 
                 match result {
