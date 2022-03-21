@@ -1,7 +1,7 @@
 # Secret data transfer enclave
 
 ## Overview
-This project and demo is an implementation of a secret data transfer application using Intel SGX secure enclaves. This application consists of three parties: a user, an admin, and auditors. During signup the user backs up their secret data to the enclave without revealing it to the admin. There is a two step retreival process. First, the user uses some external mechanism to prove their identity to the admin. After a mandatory weight period they are able to finish the recovery of their data again without revealing it to the admin. In order to limit the admin's power we allow for caps on the number of users who can recover their data in a time period, have a mechanism for users to cancel retreival during the mandatory weight period, and allow for public auditing of all signups and retreivals in the enclave.
+This project and demo is an implementation of a secret data transfer application using Intel SGX secure enclaves and blockchain based bulletin board. This application tries to solve the problem of secure data recovery by designating a semi-trusted administrator that can verify the user's identity during the recovery process. It employs different strategies to ensure accountability of the administrator.  In order to limit the admin's power we implement restrictions on the number and frequency of data retrieval, have a mechanism for users to be notified of and cancel a fraudulent retrieval, and allow for public auditing of all signups and retrievals in the enclave.
 
 ## Demo output
 ![Output of Demo](docs/demo1.png?raw=true)
