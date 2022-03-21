@@ -4,14 +4,14 @@
 This project and demo is an implementation of a secret data transfer application using Intel SGX secure enclaves. This application consists of three parties: a user, an admin, and auditors. During signup the user backs up their secret data to the enclave without revealing it to the admin. There is a two step retreival process. First, the user uses some external mechanism to prove their identity to the admin. After a mandatory weight period they are able to finish the recovery of their data again without revealing it to the admin. In order to limit the admin's power we allow for caps on the number of users who can recover their data in a time period, have a mechanism for users to cancel retreival during the mandatory weight period, and allow for public auditing of all signups and retreivals in the enclave.
 
 ## Demo output
-![Output of Demo](/pktransfer/pktransfer/blob/main/docs/demo1.png?raw=true)
+![Output of Demo](/pktransfer/pktransfer/docs/demo1.png?raw=true)
 * Signup 4 users
 * Users 2,3,4 start retreival process
 * User 3 cancels retreival process
 * User 3 fails to complete retreival (because it was canceled)
 * User 4 completes retreival and checks that the correct data was recovered
 
-![Output of Demo](/pktransfer/pktransfer/blob/main/docs/demo2.png?raw=true)
+![Output of Demo](/pktransfer/pktransfer/docs/demo2.png?raw=true)
 * All users audit and verify the path for their merkle tree leaf node
 
 ## Demo Steps
