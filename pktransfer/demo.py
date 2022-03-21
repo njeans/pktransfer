@@ -81,96 +81,116 @@ def get_number_trunc(values,reverse_values=True):
     h=get_number_hex(values,reverse_values=reverse_values)
     return str(h[:10])+"..."
 
-
 class Tree(object):
-    def __init__(self):
+    def __init__(self, nodes, leaves):
+        self.root = Node(nodes[0])
+        self.leaves=[None for _ in range(len(leaves))]
+        self._build(nodes,1,self.root,leaves)
+
+    def get_path(self,leaf_index=-1,data=None,equality_fun=None,leaf_node=None):
+        if leaf_node is not None:
+            return self._path(leaf_node)
+        leaf_node=self.get_leaf_node(leaf_index=leaf_index,data=data,equality_fun=equality_fun)
+        if leaf_node is not None:
+            return self._path(leaf_node)
+        return None
+
+    def get_leaf_node(self,leaf_index=-1,data=None,equality_fun=None):
+        if leaf_index != -1 and leaf_index < len(self.leaves):
+            return self.leaves[leaf_index]
+        elif data is not None:
+            for l in self.leaves:
+                if l.leaf == data:
+                    return l
+                if l.data == data:
+                    return l
+        elif equality_fun is not None:
+            for l in self.leaves:
+                if equality_fun(l.leaf):
+                    return l
+        print("Error leaf node not found")
+        return None
+
+    def __str__(self):
+        return self._print(self.root)
+
+    def _path(self, curr):
+        if curr.parent is not None:
+            node_path_pairs = [curr.siblings() + [curr.parent]]
+            return node_path_pairs + self._path(curr.parent)
+        return []
+
+
+    def _print(self, node, level=0, right=False, p=lambda x: get_number_trunc(x)):
+        output = ""
+        if node != None:
+            output += self._print(node.left, level + 1,p=p)
+            leaf=""
+            if node.leaf is not None:
+                leaf = " leaf: [" + str(node.leaf) + "]"
+            if right:
+                # print(bcolors.AUDIT+"\t\t\t" * level + '-> (' + p(node.data)+")"+leaf,bcolors.ENDC)
+                output += bcolors.AUDIT+ str("\t\t\t" * level) + '-> (' + p(node.data)+")"+leaf + bcolors.ENDC + "\n"
+                # print("\t" * level + '\\', node.data)
+            else:
+                # print("\t" * level + '/', node.data)
+                # print(bcolors.AUDIT+"\t\t\t" * level + '-> (' + p(node.data)+")"+leaf,bcolors.ENDC)
+                output += bcolors.AUDIT+ str("\t\t\t" * level) + '-> (' + p(node.data)+")"+leaf + bcolors.ENDC+"\n"
+            output += self._print(node.right, level + 1, True,p=p)
+        return output
+
+    def _build(self, nodes,pos,curr,leaves):
+        level = math.floor(math.log(pos,2))
+        left_pos = 2**(level+1) + (pos-2**level) * 2
+        right_pos = 2**(level+1) + (pos-2**level) * 2 + 1
+        if pos > len(nodes) - len(leaves): # leaf node
+            leaf_index = pos-(len(nodes)-len(leaves))-1
+            curr.leaf = leaves[leaf_index]
+            self.leaves[leaf_index] = curr
+        if left_pos <= len(nodes):
+            curr.left = Node(nodes[left_pos-1],parent=curr)
+            curr.left.data = nodes[left_pos-1]
+            self._build(nodes,left_pos,curr.left,leaves)
+        if right_pos <= len(nodes):
+            curr.right =  Node(nodes[right_pos-1],parent=curr)
+            curr.right.data = nodes[right_pos-1]
+            self._build(nodes,right_pos,curr.right,leaves)
+
+
+class Node(object):
+    def __init__(self, data, parent=None):
         self.left = None
         self.right = None
-        self.data = None
+        self.data = data
         self.leaf = None
+        self.parent = parent
 
     def __str__(self):
         return str(self.data)
 
-def helper(nodes,pos,curr,leaves):
-    level = math.floor(math.log(pos,2))
-    left_pos = 2**(level+1) + (pos-2**level) * 2
-    right_pos = 2**(level+1) + (pos-2**level) * 2 + 1
-    if pos > len(nodes) - len(leaves):
-        curr.leaf = leaves[pos-(len(nodes)-len(leaves))-1]
+    def siblings(self):
+        if self.parent is not None:
+            if self.parent.left == self:
+                return [self.parent.left,self.parent.right]
+            elif self.parent.right == self:
+                return [self.parent.left,self.parent.right]
 
-    if left_pos <= len(nodes):
-        curr.left = Tree()
-        curr.left.data = nodes[left_pos-1]
-        helper(nodes,left_pos,curr.left,leaves)
-    if right_pos <= len(nodes):
-        curr.right =  Tree()
-        curr.right.data = nodes[right_pos-1]
-        helper(nodes,right_pos,curr.right,leaves)
+def check_path(path,leaf_node,color):
+    leaf_data = leaf_node.leaf
+    leaf_hash = leaf_node.data
 
-def make_tree(nodes,leaves):
-    root = Tree()
-    pos = 1
-    root.data = nodes[0]
-    helper(nodes,pos,root,leaves)
-    return root
-
-def print_tree(node, level=0, right=False, p=lambda x: get_number_trunc(x)):
-    if node != None:
-        print_tree(node.left, level + 1,p=p)
-        leaf=""
-        if node.leaf is not None:
-            leaf = " leaf: [" + str(node.leaf) + "]"
-        if right:
-            print(bcolors.AUDIT+"\t\t\t" * level + '-> (' + p(node.data)+")"+leaf,bcolors.ENDC)
-            # print("\t" * level + '\\', node.data)
-        else:
-            # print("\t" * level + '/', node.data)
-            print(bcolors.AUDIT+"\t\t\t" * level + '-> (' + p(node.data)+")"+leaf,bcolors.ENDC)
-        print_tree(node.right, level + 1, True,p=p)
-
-def helper_index(curr_path,leaf_index):
-    if leaf_index <= 0:
-        return curr_path
-    if leaf_index % 2 == 1:
-        leaf_level =  math.floor(math.log(leaf_index+1,2))
-        parent_index = (leaf_index + 1 - 2**(leaf_level+1))/2 -1 + 2**leaf_level
-        curr_path.append(leaf_index+1)
-        curr_path.append(int(parent_index))
-        helper_index(curr_path,int(parent_index))
-    else:
-        leaf_level =  math.floor(math.log(leaf_index+1,2))
-        parent_index = (leaf_index + 1 - 2**(leaf_level+1) - 1)/2 - 1 + 2**leaf_level
-        curr_path.append(leaf_index-1)
-        curr_path.append(int(parent_index))
-        helper_index(curr_path,int(parent_index))
-
-def get_path(nodes,leaf_index):
-    path=[leaf_index]
-    node_path_pairs = []
-    for i in range(0,len(path)-2,2):
-        n1 = path[i]
-        n2 = path[i+1]
-        if n2 >= len(nodes): #duplicate leaf node if there are odd number of leaf nodes
-            n2 = n1
-        if n1 > n2:
-            node_path_pairs.append((nodes[n2],nodes[n1],nodes[path[i+2]]))
-        else:
-            node_path_pairs.append((nodes[n1],nodes[n2],nodes[path[i+2]]))
-    return node_path_pairs
-
-def check_path(path,leaf,color,entry):
-    entry_data = int_to_bytes(entry["uid"],4)+int_to_bytes(entry["countdown"],8)+int_to_bytes(entry["retrieve_count"],8)
+    entry_data = int_to_bytes(leaf_data["uid"],4)+int_to_bytes(leaf_data["countdown"],8)+int_to_bytes(leaf_data["retrieve_count"],8)
     h_entry = Crypto.Hash.SHA256.new(bytearray(entry_data))
-    print(color+"hash of entry",str(entry),"->",get_number_trunc(leaf),bcolors.ENDC)
     # print(get_number_hex(leaf,reverse_values=False)==("0x"+h_entry.hexdigest().lstrip("0")),("0x"+h_entry.hexdigest().lstrip("0"))[:10],get_number_trunc(leaf,reverse_values=False))
-    assert(get_number_hex(leaf,reverse_values=False)==("0x"+h_entry.hexdigest().lstrip("0")))
+    assert(get_number_hex(leaf_hash,reverse_values=False)==("0x"+h_entry.hexdigest().lstrip("0")))
+    print(color+"\tchecked hash of entry",str(leaf_data),"->",get_number_trunc(leaf_hash),bcolors.ENDC)
+
     for node_path_pairs in path:
         left,right,res=node_path_pairs
-        h = Crypto.Hash.SHA256.new(bytearray(left+right))
-        print(color+"combine",get_number_trunc(left),"+",get_number_trunc(right),"->",get_number_trunc(res),bcolors.ENDC)
-        # print("0x"+h.hexdigest().lstrip("0")==get_number_hex(res,reverse_values=False),("0x"+h.hexdigest().lstrip("0"))[:10],get_number_trunc(res,reverse_values=False))
-        assert("0x"+h.hexdigest().lstrip("0")==get_number_hex(res,reverse_values=False))
+        h = Crypto.Hash.SHA256.new(bytearray(left.data+right.data))
+        assert("0x"+h.hexdigest().lstrip("0")==get_number_hex(res.data,reverse_values=False))
+        print(color+"\tcombine",get_number_trunc(left.data),"+",get_number_trunc(right.data),"->",get_number_trunc(res.data),bcolors.ENDC)
+        # print(color+"\t0x"+h.hexdigest().lstrip("0")==get_number_hex(res.data,reverse_values=False),("0x"+h.hexdigest().lstrip("0"))[:10],get_number_trunc(res.data,reverse_values=False),bcolors.ENDC)
 
 def compile_source_file(file_path):
     base="/root/sgx/samplecode/pktransfer/solidity"
@@ -205,7 +225,7 @@ def setupW3(audit):
     else:
         with open("contract_address.txt") as f:
             contract_addresss=f.read()
-        _,contract,_ = deploy_contract(w3, abis, bins,admin, contract_address=contract_addresss)
+        contract_addresss,contract,_ = deploy_contract(w3, abis, bins,admin, contract_address=contract_addresss)
     print(f'Deployed {contract_id} to: {contract_addresss}')
     return w3,contract,admin,accounts_info
 
@@ -338,23 +358,19 @@ def audit_tree():
 
     leaves = audit_data["tree"]["leaves"]
     nodes = audit_data["tree"]["nodes"]
-    audit_tree = make_tree(nodes,leaves)
-    print(bcolors.AUDIT+"audit_data[tree]",bcolors.ENDC)
-    print_tree(audit_tree)
+    audit_tree = Tree(nodes,leaves)
+    print(audit_tree)
     assert(audit_data["retrieve_count"] <= max_count)
     print(bcolors.AUDIT+"audit_data retrieve_count",audit_data["retrieve_count"], "MAX_retrieve", max_count,bcolors.ENDC)
     print()
-    return nodes,leaves
+    return audit_tree
 
-def audit_user(uid,secret,tree_nodes,leaves,color):
-    print
-    leaf_index = 0
-    for i in range(len(leaves)):
-        if leaves[i]["uid"] == uid:
-            leaf_index=len(tree_nodes)-len(leaves)+i
-            path = get_path(tree_nodes,leaf_index)
-            check_path(path,tree_nodes[leaf_index],color,leaves[i])
-            print()
+def audit_user(uid,audit_tree,color):
+    leaf_node = audit_tree.get_leaf_node(equality_fun=lambda x: x["uid"] == uid)
+    path = audit_tree.get_path(leaf_node=leaf_node)
+    check_path(path,leaf_node,color)
+    print()
+
 
 def to_32byte_hex(val):
     return Web3.toHex(Web3.toBytes(val).rjust(32, b'\0'))
@@ -468,13 +484,13 @@ def run_demo():
     print("\n"+bcolors.AUDIT+"Public Audit Website------------------------------------------------------------------------------------------------------",bcolors.ENDC)
 
 
-    tree_nodes,leaves = audit_tree()
+    audit_tree_obj = audit_tree()
 
 
     for i in range(len(users_list)):
         uid,test_data,cancel_key,color,w3addr = users_list[i]
         print(color+"Begin user",uid,"Auditing------------------------------------------------------------------------------------------------------",bcolors.ENDC)
-        audit_user(uid,None,tree_nodes,leaves,color)
+        audit_user(uid,audit_tree_obj,color)
 
 
 only_audit = False

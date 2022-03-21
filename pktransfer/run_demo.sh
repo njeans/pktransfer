@@ -1,6 +1,5 @@
 cd bin
 rm data.sealed
-ls
 ./app > server.log &
 APP_PID=$!
 cd ..

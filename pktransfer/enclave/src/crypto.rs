@@ -241,7 +241,12 @@ pub fn build_aead_key(key_bytes: [u8; 32], nonce_bytes: [u8; aead::NONCE_LEN]) -
             return Err(e);
         }
     };
-    let seal_nonce = aead::Nonce::try_assume_unique_for_key(&nonce_bytes).unwrap();
+    let seal_nonce = match aead::Nonce::try_assume_unique_for_key(&nonce_bytes){
+        Ok(x) => x,
+        Err(e) => {
+            return Err(e);
+        }
+    };
     let nonce_sequence = OneNonceSequence::new(seal_nonce);
     let output_key: aead::SealingKey<OneNonceSequence> = aead::BoundKey::new(key, nonce_sequence);
     Ok(output_key)

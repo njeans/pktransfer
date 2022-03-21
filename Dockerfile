@@ -23,7 +23,6 @@ WORKDIR /root/sgx/samplecode/pktransfer
 COPY ./pktransfer .
 
 WORKDIR /root/sgx/samplecode/pktransfer/solidity
-RUN ls
 
 RUN git clone https://github.com/OpenZeppelin/openzeppelin-contracts.git \
   && cd /root/sgx/samplecode/pktransfer/solidity/openzeppelin-contracts \

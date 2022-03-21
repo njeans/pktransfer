@@ -61,8 +61,8 @@ extern {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AuditDatabase {
-    timestamp: u64,
-    retrieve_count: u64,
+    pub timestamp: u64,
+    pub retrieve_count: u64,
     // users: Vec<Vec<u8>>,
     // retrieve: Vec<Vec<u8>>,
     tree: MerkleTree,

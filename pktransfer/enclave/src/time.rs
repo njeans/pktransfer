@@ -6,6 +6,7 @@ use http_req::{request::RequestBuilder, tls, uri::Uri};
 use serde_json;
 
 pub fn get_timestamp() -> u64 {
+    println!("get_timestamp");
     match timezonedb() {
         Some(x) => {
             println!("timezonedb {}",x);
@@ -26,7 +27,13 @@ pub fn get_timestamp() -> u64 {
 fn ipgeolocation() -> Option<u64> {
     let hostname = "https://api.ipgeolocation.io/timezone?apiKey=157647b62b6d455fa06cc6c3830f2fd6";
 
-    let addr: Uri = hostname.parse().unwrap();
+    let addr: Uri = match hostname.parse() {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Err hostname parse {:?}",e);
+            return None;
+        }
+    };
     let host = match addr.host() {
         Some(x) => x,
         None => {
@@ -38,18 +45,33 @@ fn ipgeolocation() -> Option<u64> {
 
     let conn_addr = format!("{}:{}", host, port);
 
-    let stream = TcpStream::connect(conn_addr).unwrap();
+    let stream = match TcpStream::connect(conn_addr) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Err TcpStream::connect {:?}",e);
+            return None;
+        }
+    };
 
-    let mut stream = tls::Config::default()
-        .connect(addr.host().unwrap_or(""), stream)
-        .unwrap();
+    let mut stream = match tls::Config::default().connect(addr.host().unwrap_or(""), stream) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Err tls::connect {:?}",e);
+                return None;
+            }
+    };
 
     let mut writer = Vec::new();
 
-    let response = RequestBuilder::new(&addr)
+    let response = match RequestBuilder::new(&addr)
         .header("Connection", "Close")
-        .send(&mut stream, &mut writer)
-        .unwrap();
+        .send(&mut stream, &mut writer) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Err get response {:?}",e);
+                return None;
+            }
+    };
     let res = String::from_utf8_lossy(&writer);
 
     let json_res: serde_json::Value = match serde_json::from_str(&res) {
@@ -73,7 +95,13 @@ fn ipgeolocation() -> Option<u64> {
 
 fn timezonedb() -> Option<u64> {
     let hostname = "http://api.timezonedb.com/v2.1/get-time-zone?key=G6905DVGFEKH&format=json&by=zone&zone=America/Chicago";
-    let addr: Uri = hostname.parse().unwrap();
+    let addr: Uri = match hostname.parse(){
+        Ok(x) => x,
+        Err(e) => {
+            println!("Err hostname parse {:?}",e);
+            return None;
+        }
+    };
     let host = match addr.host() {
         Some(x) => x,
         None => {
@@ -86,18 +114,33 @@ fn timezonedb() -> Option<u64> {
 
     let conn_addr = format!("{}:{}", host, port);
 
-    let stream = TcpStream::connect(conn_addr).unwrap();
+    let stream = match TcpStream::connect(conn_addr) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Err TcpStream::connect {:?}",e);
+            return None;
+        }
+    };
 
-    let mut stream = tls::Config::default()
-        .connect(addr.host().unwrap_or(""), stream)
-        .unwrap();
+    let mut stream = match tls::Config::default().connect(addr.host().unwrap_or(""), stream) {
+        Ok(x) => x,
+        Err(e) => {
+            println!("Err tls::connect {:?}",e);
+            return None;
+        }
+    };
 
     let mut writer = Vec::new();
 
-    let response = RequestBuilder::new(&addr)
+    let response = match RequestBuilder::new(&addr)
         .header("Connection", "Close")
-        .send(&mut stream, &mut writer)
-        .unwrap();
+        .send(&mut stream, &mut writer) {
+            Ok(x) => x,
+            Err(e) => {
+                println!("Err get response {:?}",e);
+                return None;
+            }
+    };
     let res = String::from_utf8_lossy(&writer);
 
     let json_res: serde_json::Value = match serde_json::from_str(&res) {
